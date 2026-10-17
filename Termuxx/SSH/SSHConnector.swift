@@ -60,7 +60,8 @@ enum HostKeyFingerprint {
 
 enum SSHConnector {
     @MainActor
-    static func connect(_ server: Server, password: String? = nil, store: Store = .shared) async throws -> SSHClient {
+    static func connect(_ server: Server, password: String? = nil, store: Store? = nil) async throws -> SSHClient {
+        let store = store ?? Store.shared
         let auth = try authentication(for: server, password: password, store: store)
         let knownKey = server.knownHostsKey
         let validator = TOFUHostKeyValidator(expected: store.knownHosts[knownKey]) { fingerprint in

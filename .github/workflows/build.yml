@@ -45,7 +45,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
-          test -d build/Build/Products/Release-iphoneos/Termuxx.app
+          test -f build/Build/Products/Release-iphoneos/Termuxx.app/Termuxx
 
       - name: Package IPA
         run: |
@@ -73,6 +73,14 @@ jobs:
           prerelease: true
           make_latest: false
           files: ci-log.txt
+
+      - name: Remove old releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 100 --json tagName --jq '.[].tagName' | grep '^v1\.0\.' | while read tag; do
+            gh release delete "$tag" --yes --cleanup-tag || true
+          done
 
       - name: Release IPA
         uses: softprops/action-gh-release@v2

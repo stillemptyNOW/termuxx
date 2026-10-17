@@ -47,10 +47,10 @@ struct TerminalScreen: View {
         TerminalHost(session: session)
             .ignoresSafeArea(.container, edges: .bottom)
             .ignoresSafeArea(.keyboard)
-            .background(Color(uiColor: session.terminalView.nativeBackgroundColor))
+            .background(SwiftUI.Color(uiColor: session.terminalView.nativeBackgroundColor))
             .navigationTitle(session.title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color(uiColor: session.terminalView.nativeBackgroundColor), for: .navigationBar)
+            .toolbarBackground(SwiftUI.Color(uiColor: session.terminalView.nativeBackgroundColor), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -116,7 +116,7 @@ struct TerminalScreen: View {
             .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
     }
 
-    private var statusColor: Color {
+    private var statusColor: SwiftUI.Color {
         switch session.state {
         case .connecting: return .orange
         case .connected: return .green
