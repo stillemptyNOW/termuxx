@@ -1,0 +1,85 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Termuxx.xcodeproj \
+            -scheme Termuxx \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
+          test -d build/Build/Products/Release-iphoneos/Termuxx.app
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Termuxx.app Payload/
+          zip -qry Termuxx.ipa Payload
+          ls -lh Termuxx.ipa
+
+      - name: Collect log
+        if: always()
+        run: |
+          {
+            echo "run: ${{ github.run_number }} sha: ${{ github.sha }} status: ${{ job.status }}"
+            grep -E "error:" build.log | sort -u | head -150 || true
+            echo "------ tail ------"
+            tail -80 build.log || true
+          } > ci-log.txt
+
+      - name: Upload CI log
+        if: always()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-log
+          name: CI log
+          prerelease: true
+          make_latest: false
+          files: ci-log.txt
+
+      - name: Release IPA
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Termuxx 1.0 (build ${{ github.run_number }})
+          make_latest: true
+          body: |
+            Неподписанный .ipa — подпишите через eSign, Sideloadly, AltStore или TrollStore.
+          files: Termuxx.ipa
