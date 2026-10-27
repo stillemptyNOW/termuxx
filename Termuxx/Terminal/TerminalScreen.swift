@@ -109,8 +109,8 @@ struct TerminalScreen: View {
                     currentID: currentID,
                     splitID: splitSession?.id,
                     namespace: glassNamespace,
-                    onSelect: select,
-                    onClose: close
+                    onSelect: selectSession,
+                    onClose: closeSession
                 )
             }
             if let session = current {
@@ -119,10 +119,10 @@ struct TerminalScreen: View {
                     split: splitSession,
                     splitID: $splitID,
                     sheet: $sheet,
-                    onSelect: select,
-                    onCycle: cycle,
-                    onSelectIndex: selectIndex,
-                    onClose: close
+                    onSelect: selectSession,
+                    onCycle: cycleSessions,
+                    onSelectIndex: selectSessionIndex,
+                    onClose: closeSession
                 )
                 .id(session.id)
             } else {
@@ -141,7 +141,7 @@ struct TerminalScreen: View {
         .onChange(of: keepAwake) { _, value in
             UIApplication.shared.isIdleTimerDisabled = value
         }
-        .onChange(of: sessions.sessions.map(\.id)) { _, ids in
+        .onChange(of: sessions.sessions.map { $0.id }) { _, ids in
             if let splitID, !ids.contains(splitID) {
                 self.splitID = nil
             }
@@ -157,6 +157,7 @@ struct TerminalScreen: View {
             sheetContent(sheet)
                 .environmentObject(store)
                 .environmentObject(sessions)
+                .environmentObject(AppRouter.shared)
         }
     }
 
@@ -180,7 +181,7 @@ struct TerminalScreen: View {
 
     // MARK: Вкладки
 
-    private func select(_ id: UUID) {
+    private func selectSession(_ id: UUID) {
         guard id != currentID, sessions.session(id) != nil else { return }
         withAnimation(.spring(duration: 0.3)) {
             if splitID == id { splitID = currentID }
@@ -188,18 +189,18 @@ struct TerminalScreen: View {
         }
     }
 
-    private func cycle(_ offset: Int) {
+    private func cycleSessions(_ offset: Int) {
         guard let next = sessions.neighbour(of: currentID, offset: offset), next.id != currentID else { return }
-        select(next.id)
+        selectSession(next.id)
     }
 
-    private func selectIndex(_ index: Int) {
+    private func selectSessionIndex(_ index: Int) {
         let all = sessions.sessions
         guard index >= 1, index <= all.count else { return }
-        select(all[index - 1].id)
+        selectSession(all[index - 1].id)
     }
 
-    private func close(_ session: TerminalSession) {
+    private func closeSession(_ session: TerminalSession) {
         let wasCurrent = session.id == currentID
         let next = wasCurrent ? sessions.neighbour(of: session.id, offset: 1) : nil
         if splitID == session.id { splitID = nil }

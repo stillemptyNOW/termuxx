@@ -94,6 +94,18 @@ final class Store: ObservableObject {
         keys.append(item)
     }
 
+    /// Добавляет или обновляет метаданные ключа (секреты не трогает).
+    func upsertKey(_ item: SSHKeyItem) {
+        if let i = keys.firstIndex(where: { $0.id == item.id }) {
+            keys[i] = item
+        } else {
+            keys.append(item)
+        }
+    }
+
+    func setPrivateKey(_ pem: String?, for id: UUID) { Keychain.set(pem, for: "key.\(id)") }
+    func setPassphrase(_ passphrase: String?, for id: UUID) { Keychain.set(passphrase, for: "keypass.\(id)") }
+
     func deleteKey(_ item: SSHKeyItem) {
         Keychain.delete("key.\(item.id)")
         Keychain.delete("keypass.\(item.id)")

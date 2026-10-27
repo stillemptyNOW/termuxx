@@ -276,7 +276,7 @@ final class KeyBar: UIInputView, UIInputViewAudioFeedback {
     private var modifierButtons: [KeyBarItem: UIButton] = [:]
     private var repeatTask: Task<Void, Never>?
     private let haptics = UIImpactFeedbackGenerator(style: .light)
-    private var observers: [NSObjectProtocol] = []
+    private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
 
     private static let accent = UIColor(hex: "#3DDC97")
     private static let barHeight: CGFloat = 46
@@ -294,7 +294,7 @@ final class KeyBar: UIInputView, UIInputViewAudioFeedback {
         let center = NotificationCenter.default
         for name in [Notification.Name.terminalViewControlModifierReset, .terminalViewMetaModifierReset] {
             let token = center.addObserver(forName: name, object: terminalView, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
+                MainActor.assumeIsolated { () -> Void in
                     self?.updateModifierStates()
                 }
             }
@@ -418,7 +418,7 @@ final class KeyBar: UIInputView, UIInputViewAudioFeedback {
         return config
     }
 
-    private func item(for button: UIButton) -> KeyBarItem? {
+    private func keyItem(for button: UIButton) -> KeyBarItem? {
         let all = KeyBarItem.allCases
         guard button.tag >= 0, button.tag < all.count else { return nil }
         return all[button.tag]
@@ -440,7 +440,7 @@ final class KeyBar: UIInputView, UIInputViewAudioFeedback {
     // MARK: Действия
 
     @objc private func tapped(_ sender: UIButton) {
-        guard let item = item(for: sender), let terminalView else { return }
+        guard let item = keyItem(for: sender), let terminalView else { return }
         feedback()
         switch item {
         case .ctrl:
@@ -472,7 +472,7 @@ final class KeyBar: UIInputView, UIInputViewAudioFeedback {
     }
 
     @objc private func repeatBegan(_ sender: UIButton) {
-        guard let item = item(for: sender) else { return }
+        guard let item = keyItem(for: sender) else { return }
         stopRepeat()
         feedback()
         send(item)

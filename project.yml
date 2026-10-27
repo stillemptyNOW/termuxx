@@ -54,11 +54,18 @@ targets:
         NSFaceIDUsageDescription: Termuxx использует Face ID, чтобы защитить ваши серверы и ключи.
         NSLocalNetworkUsageDescription: Termuxx подключается к серверам в вашей локальной сети по SSH.
         UIStatusBarStyle: UIStatusBarStyleLightContent
+        UIAppFonts:
+          - JetBrainsMono-Regular.ttf
+          - JetBrainsMono-Bold.ttf
+          - IBMPlexMono-Regular.ttf
+          - IBMPlexMono-Bold.ttf
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.stillempty.termuxx
-        MARKETING_VERSION: 1.0.0
-        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 1.1.0
+        CURRENT_PROJECT_VERSION: 2
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
