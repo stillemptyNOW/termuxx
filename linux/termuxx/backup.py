@@ -16,6 +16,7 @@ import base64
 import hashlib
 import json
 import os
+import unicodedata
 from dataclasses import dataclass
 from typing import Optional
 
@@ -49,7 +50,17 @@ class ImportSummary:
 
 
 def _derive(password: str, salt: bytes, iterations: int) -> bytes:
-    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations, 32)
+    pw = unicodedata.normalize("NFC", password).encode("utf-8")
+    return hashlib.pbkdf2_hmac("sha256", pw, salt, iterations, dklen=32)
+
+
+def _drop_nulls(value):
+    """iOS опускает null-поля внутри объектов — делаем так же."""
+    if isinstance(value, dict):
+        return {k: _drop_nulls(v) for k, v in value.items() if v is not None}
+    if isinstance(value, list):
+        return [_drop_nulls(v) for v in value]
+    return value
 
 
 def _encrypt(payload: dict, password: str) -> dict:
@@ -82,6 +93,8 @@ def _decrypt(secrets: dict, password: str) -> dict:
         iterations = int(secrets.get("iterations") or ITERATIONS)
     except (KeyError, ValueError, TypeError) as e:
         raise BackupError("Повреждённый блок секретов.") from e
+    if not 1 <= iterations <= 10_000_000 or len(nonce) != 12 or len(data) < 16:
+        raise BackupError("Повреждённый блок секретов.")
     key = _derive(password, salt, iterations)
     try:
         plain = AESGCM(key).decrypt(nonce, data, None)
@@ -100,9 +113,9 @@ def export_backup(store: Store, path: str, include_secrets: bool = False, passwo
         "version": VERSION,
         "createdAt": now_iso(),
         "app": "linux",
-        "hosts": [s.to_json() for s in store.servers],
-        "keys": [k.to_json() for k in store.keys],
-        "snippets": [s.to_json() for s in store.snippets],
+        "hosts": [_drop_nulls(s.to_json()) for s in store.servers],
+        "keys": [_drop_nulls(k.to_json()) for k in store.keys],
+        "snippets": [_drop_nulls(s.to_json()) for s in store.snippets],
         "knownHosts": dict(store.known_hosts),
         "secrets": None,
     }
@@ -158,11 +171,13 @@ def import_backup(store: Store, data: dict, password: Optional[str] = None) -> I
         else:
             summary.secrets_skipped = True
 
-    def merge(items: list, new_items: list) -> int:
+    def merge(items: list, new_items: list, on_replace=None) -> int:
         count = 0
         for item in new_items:
             for i, old in enumerate(items):
                 if old.id == item.id:
+                    if on_replace:
+                        on_replace(old, item)
                     items[i] = item
                     break
             else:
@@ -170,15 +185,40 @@ def import_backup(store: Store, data: dict, password: Optional[str] = None) -> I
             count += 1
         return count
 
-    servers = [Server.from_json(d) for d in data.get("hosts") or [] if isinstance(d, dict)]
-    keys = [KeyItem.from_json(d) for d in data.get("keys") or [] if isinstance(d, dict)]
-    snippets = [Snippet.from_json(d) for d in data.get("snippets") or [] if isinstance(d, dict)]
-    summary.servers = merge(store.servers, servers)
+    def keep_latest(old: Server, new: Server) -> None:
+        # lastConnected — более поздний из двух
+        if old.last_connected and (not new.last_connected or old.last_connected > new.last_connected):
+            new.last_connected = old.last_connected
+
+    def parse(items, factory, valid):
+        result = []
+        for d in items or []:
+            if not isinstance(d, dict) or not d.get("id"):
+                continue
+            try:
+                obj = factory(d)
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if valid(obj):
+                result.append(obj)
+        return result
+
+    def valid_server(s: Server) -> bool:
+        if not s.hostname:
+            return False
+        s.forwards = [f for f in s.forwards if 1 <= f.local_port <= 65535 and 1 <= f.remote_port <= 65535]
+        return True
+
+    servers = parse(data.get("hosts"), Server.from_json, valid_server)
+    keys = parse(data.get("keys"), KeyItem.from_json, lambda k: True)
+    snippets = parse(data.get("snippets"), Snippet.from_json, lambda sn: bool(sn.command))
+    summary.servers = merge(store.servers, servers, keep_latest)
     summary.keys = merge(store.keys, keys)
     summary.snippets = merge(store.snippets, snippets)
     kh = data.get("knownHosts")
     if isinstance(kh, dict):
-        store.known_hosts.update({str(k): str(v) for k, v in kh.items()})
+        for k, v in kh.items():
+            store.known_hosts.setdefault(str(k), str(v))  # существующие отпечатки не перезаписываем
 
     def norm(d) -> dict:
         return {norm_id(k): v for k, v in (d or {}).items() if isinstance(v, str) and v} if isinstance(d, dict) else {}
