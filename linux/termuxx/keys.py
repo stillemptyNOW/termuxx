@@ -107,6 +107,7 @@ class KeysDialog:
         )
         add = Gtk.MenuButton(icon_name="list-add-symbolic", tooltip_text="Добавить ключ")
         add.add_css_class("flat")
+        add.set_valign(Gtk.Align.CENTER)
         menu = Gio.Menu()
         menu.append("Создать ключ Ed25519", "keys.generate")
         menu.append("Импортировать из файла…", "keys.import-file")

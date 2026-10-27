@@ -66,6 +66,7 @@ class SnippetsDialog:
                                           description="Отправляются в текущий терминал. Можно задать команду при входе в настройках сервера.")
         add = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Новый сниппет")
         add.add_css_class("flat")
+        add.set_valign(Gtk.Align.CENTER)
         add.connect("clicked", lambda *_: SnippetEditor(self.dialog))
         self.group.set_header_suffix(add)
         self.page.add(self.group)

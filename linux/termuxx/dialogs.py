@@ -266,6 +266,7 @@ class ServerEditor:
         )
         add_btn = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Добавить проброс")
         add_btn.add_css_class("flat")
+        add_btn.set_valign(Gtk.Align.CENTER)
         add_btn.connect("clicked", lambda *_: ForwardEditor(self.dialog, None, self._add_forward))
         self.fwd_group.set_header_suffix(add_btn)
         self.fwd_rows: list[Gtk.Widget] = []

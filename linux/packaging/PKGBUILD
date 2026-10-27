@@ -1,0 +1,61 @@
+# Maintainer: stillemptyNOW <https://github.com/stillemptyNOW>
+pkgname=termuxx-git
+_pkgname=termuxx
+pkgver=r1.0000000
+pkgrel=1
+pkgdesc="Terminal with tabs and SSH server manager: SFTP, monitoring, tunnels, keys, snippets (GTK4/libadwaita)"
+arch=('any')
+url="https://github.com/stillemptyNOW/termuxx"
+license=('MIT')
+depends=(
+  'python'
+  'python-gobject'
+  'gtk4'
+  'libadwaita'
+  'vte4'
+  'python-paramiko'
+  'python-cryptography'
+  'libsecret'
+  'openssh'
+  'ttf-jetbrains-mono'
+)
+makedepends=('git')
+optdepends=(
+  'sshpass: автоматический ввод сохранённых паролей в терминале'
+  'openbsd-netcat: подключение к серверу через SOCKS5-прокси'
+  'nmap: ncat для SOCKS5-прокси с логином и паролем'
+  'gtksourceview5: подсветка синтаксиса во встроенном редакторе SFTP'
+  'gnome-keyring: хранение паролей в системном хранилище (или KWallet)'
+)
+provides=('termuxx')
+conflicts=('termuxx')
+source=("termuxx::git+https://github.com/stillemptyNOW/termuxx.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$_pkgname"
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+check() {
+  cd "$srcdir/$_pkgname/linux"
+  python -m compileall -q termuxx >/dev/null
+}
+
+package() {
+  cd "$srcdir/$_pkgname/linux"
+
+  install -d "$pkgdir/usr/share/termuxx"
+  cp -r termuxx "$pkgdir/usr/share/termuxx/"
+  find "$pkgdir/usr/share/termuxx" -name '__pycache__' -type d -prune -exec rm -rf {} +
+  python -m compileall -q -d /usr/share/termuxx "$pkgdir/usr/share/termuxx" >/dev/null
+
+  install -Dm755 bin/termuxx "$pkgdir/usr/bin/termuxx"
+  install -Dm644 data/com.stillempty.Termuxx.desktop \
+    "$pkgdir/usr/share/applications/com.stillempty.Termuxx.desktop"
+  for size in 64 128 256 512; do
+    install -Dm644 "data/icons/hicolor/${size}x${size}/apps/com.stillempty.Termuxx.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/com.stillempty.Termuxx.png"
+  done
+  install -Dm644 ../LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

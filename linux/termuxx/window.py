@@ -39,15 +39,15 @@ class ServerRow(Gtk.ListBoxRow):
         box.set_margin_start(6)
         box.set_margin_end(6)
 
-        badge = Gtk.Box()
+        badge = Gtk.CenterBox()
         badge.add_css_class("server-badge")
         badge.add_css_class(f"swatch-{_color_index(server.color_hex)}")
         badge.set_size_request(34, 34)
         badge.set_valign(Gtk.Align.CENTER)
+        badge.set_halign(Gtk.Align.START)
+        badge.set_hexpand(False)
         icon = Gtk.Image(icon_name="network-server-symbolic")
-        icon.set_hexpand(True)
-        icon.set_halign(Gtk.Align.CENTER)
-        badge.append(icon)
+        badge.set_center_widget(icon)
         box.append(badge)
 
         labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -75,7 +75,7 @@ class ServerRow(Gtk.ListBoxRow):
         box.append(auth_icon)
 
         self.set_child(box)
-        self.set_tooltip_text(f"{server.title}\n{server.subtitle}\nДвойной щелчок или Enter — подключиться")
+        self.set_tooltip_text(f"{server.title}\n{server.subtitle}\nЩелчок — подключиться, правая кнопка — меню")
 
         click = Gtk.GestureClick(button=Gdk.BUTTON_SECONDARY)
         click.connect("pressed", self._on_context)

@@ -41,6 +41,26 @@ def spawn_in(terminal: Vte.Terminal, cwd: str, argv: list, env: list, callback=N
         terminal.spawn_async(Vte.PtyFlags.DEFAULT, cwd, argv, env, flags, None, -1, None, callback, None)
 
 
+_FAMILIES: Optional[set] = None
+
+
+def font_family_available(family: Optional[str]) -> bool:
+    """Есть ли шрифт в системе (иначе Pango подставит немоноширинный и буквы «разъедутся»)."""
+    global _FAMILIES
+    if not family:
+        return False
+    if _FAMILIES is None:
+        try:
+            gi.require_version("PangoCairo", "1.0")
+            from gi.repository import PangoCairo
+
+            _FAMILIES = {f.get_name().lower() for f in PangoCairo.FontMap.get_default().list_families()}
+        except Exception:
+            return True
+    names = {name.strip().lower() for name in family.split(",")}
+    return bool(names & (_FAMILIES | {"monospace", "mono", "sans", "serif"}))
+
+
 def user_shell() -> str:
     try:
         shell = Vte.get_user_shell()
@@ -148,6 +168,8 @@ class TerminalPane(Gtk.Box):
         s = self.settings
         apply_theme(self.terminal, theme_by_id(s["themeID"]))
         desc = Pango.FontDescription.from_string(s["font"] or "Monospace 11")
+        if not font_family_available(desc.get_family()):
+            desc.set_family("Monospace")
         self.terminal.set_font(desc)
         self.terminal.set_font_scale(self._font_scale)
         self.terminal.set_scrollback_lines(int(s["scrollback"]))

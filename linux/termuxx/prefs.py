@@ -16,6 +16,7 @@ from termuxx import backup  # noqa: E402
 from termuxx.dialogs import show_error, spin_row, string_list  # noqa: E402
 from termuxx.settings import Settings  # noqa: E402
 from termuxx.store import Store  # noqa: E402
+from termuxx.terminal import font_family_available  # noqa: E402
 from termuxx.themes import THEMES  # noqa: E402
 
 CURSORS = [("block", "Блок"), ("ibeam", "Черта"), ("underline", "Подчёркивание")]
@@ -77,15 +78,13 @@ class PreferencesDialog:
         group = Adw.PreferencesGroup(title="Текст")
         font_row = Adw.ActionRow(title="Шрифт")
         font_dialog = Gtk.FontDialog(title="Шрифт терминала")
-        try:
-            font_filter = Gtk.CustomFilter.new(self._is_monospace)
-            font_dialog.set_filter(font_filter)
-        except Exception:
-            pass
         font_button = Gtk.FontDialogButton(dialog=font_dialog)
         font_button.set_use_font(True)
         font_button.set_valign(Gtk.Align.CENTER)
-        font_button.set_font_desc(Pango.FontDescription.from_string(self.settings["font"]))
+        desc = Pango.FontDescription.from_string(self.settings["font"] or "Monospace 11")
+        if not font_family_available(desc.get_family()):
+            desc.set_family("Monospace")
+        font_button.set_font_desc(desc)
         font_button.connect("notify::font-desc", self._on_font)
         font_row.add_suffix(font_button)
         group.add(font_row)
