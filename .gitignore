@@ -11,3 +11,6 @@ linux/packaging/src/
 linux/packaging/pkg/
 linux/packaging/termuxx/
 linux/packaging/*.pkg.tar.zst
+windows/node_modules/
+windows/dist/
+windows/release/

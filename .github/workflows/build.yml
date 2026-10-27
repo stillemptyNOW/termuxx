@@ -131,9 +131,64 @@ jobs:
             logs/ci-log-linux.txt
           if-no-files-found: ignore
 
+  windows:
+    name: Windows (.exe)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund 2>&1 | tee ../win-install.log
+
+      - name: Typecheck
+        run: npx tsc -p tsconfig.json --noEmit 2>&1 | tee ../win-typecheck.log
+
+      - name: Build installer
+        env:
+          NODE_ENV: production
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist 2>&1 | tee ../win-dist.log
+
+      - name: Smoke test
+        run: |
+          timeout 90 ./release/win-unpacked/Termuxx.exe --smoke-test 2>&1 | tee ../win-smoke.log
+
+      - name: Collect
+        if: always()
+        run: |
+          mkdir -p ../logs ../dist
+          cp release/*.exe ../dist/ 2>/dev/null || true
+          ls -lh ../dist || true
+          {
+            echo "windows run: ${{ github.run_number }} sha: ${{ github.sha }}"
+            echo "------ install ------"; tail -30 ../win-install.log 2>/dev/null || true
+            echo "------ typecheck ------"; tail -60 ../win-typecheck.log 2>/dev/null || true
+            echo "------ dist ------"; tail -60 ../win-dist.log 2>/dev/null || true
+            echo "------ smoke ------"; tail -30 ../win-smoke.log 2>/dev/null || true
+          } > ../logs/ci-log-windows.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows
+          path: |
+            dist/*.exe
+            logs/ci-log-windows.txt
+          if-no-files-found: ignore
+
   release:
     name: Release
-    needs: [ios, linux]
+    needs: [ios, linux, windows]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -146,12 +201,15 @@ jobs:
         run: |
           ls -R artifacts || true
           {
-            echo "ios: ${{ needs.ios.result }} | linux: ${{ needs.linux.result }}"
+            echo "ios: ${{ needs.ios.result }} | linux: ${{ needs.linux.result }} | windows: ${{ needs.windows.result }}"
             echo
             cat artifacts/logs/ci-log-ios.txt 2>/dev/null || echo "(no ios log)"
             echo
             echo "=================================================="
             cat artifacts/logs/ci-log-linux.txt 2>/dev/null || echo "(no linux log)"
+            echo
+            echo "=================================================="
+            cat artifacts/logs/ci-log-windows.txt 2>/dev/null || echo "(no windows log)"
           } > ci-log.txt
 
       - name: Upload CI log
@@ -164,7 +222,7 @@ jobs:
           files: ci-log.txt
 
       - name: Remove old releases
-        if: needs.ios.result == 'success' || needs.linux.result == 'success'
+        if: needs.ios.result == 'success' || needs.linux.result == 'success' || needs.windows.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -173,7 +231,7 @@ jobs:
           done
 
       - name: Release
-        if: needs.ios.result == 'success' || needs.linux.result == 'success'
+        if: needs.ios.result == 'success' || needs.linux.result == 'success' || needs.windows.result == 'success'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.1.${{ github.run_number }}
@@ -183,8 +241,10 @@ jobs:
           body: |
             **iOS:** `Termuxx.ipa` — неподписанный, подпишите через eSign, Sideloadly, AltStore или TrollStore. Liquid Glass на iOS 26+.
             **Arch Linux:** `termuxx-git-*.pkg.tar.zst` — установка: `sudo pacman -U termuxx-git-*.pkg.tar.zst`.
+            **Windows:** `Termuxx-Setup-*.exe` (установщик) или `Termuxx-Portable-*.exe` (без установки).
 
-            Статус сборки: iOS — ${{ needs.ios.result }}, Linux — ${{ needs.linux.result }}.
+            Статус сборки: iOS — ${{ needs.ios.result }}, Linux — ${{ needs.linux.result }}, Windows — ${{ needs.windows.result }}.
           files: |
             artifacts/dist/Termuxx.ipa
             artifacts/dist/*.pkg.tar.zst
+            artifacts/dist/*.exe
