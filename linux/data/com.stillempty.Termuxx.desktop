@@ -10,17 +10,13 @@ Icon=com.stillempty.Termuxx
 Terminal=false
 StartupNotify=true
 StartupWMClass=com.stillempty.Termuxx
-Categories=System;TerminalEmulator;Network;RemoteAccess;GTK;
+Categories=GTK;System;TerminalEmulator;
 Keywords=terminal;ssh;sftp;shell;server;vps;терминал;сервер;
 MimeType=x-scheme-handler/ssh;
-Actions=new-window;quick-connect;
+Actions=new-window;
 
 [Desktop Action new-window]
 Name=New Window
 Name[ru]=Новое окно
 Exec=termuxx --new-window
 
-[Desktop Action quick-connect]
-Name=Local Terminal
-Name[ru]=Локальный терминал
-Exec=termuxx

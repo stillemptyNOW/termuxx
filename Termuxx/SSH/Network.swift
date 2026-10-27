@@ -56,6 +56,7 @@ enum SOCKSError: LocalizedError {
     case connectFailed(UInt8)
     case closed
     case badReply
+    case timeout
 
     var errorDescription: String? {
         switch self {
@@ -69,6 +70,7 @@ enum SOCKSError: LocalizedError {
             return "SOCKS5-прокси не смог подключиться к серверу: \(reasons[code] ?? "код \(code)")."
         case .closed: return "SOCKS5-прокси закрыл соединение."
         case .badReply: return "SOCKS5-прокси ответил непонятно."
+        case .timeout: return "SOCKS5-прокси не ответил вовремя."
         }
     }
 }
@@ -105,6 +107,10 @@ final class SOCKS5Handshake: ChannelDuplexHandler, @unchecked Sendable {
     func handlerAdded(context: ChannelHandlerContext) {
         promise = context.eventLoop.makePromise(of: Void.self)
         if context.channel.isActive { sendGreeting(context) }
+        // Прокси, который принял TCP, но молчит, не должен вешать подключение навсегда.
+        context.eventLoop.scheduleTask(in: .seconds(15)) { [weak self] in
+            self?.fail(SOCKSError.timeout)
+        }
     }
 
     func channelActive(context: ChannelHandlerContext) {
@@ -232,7 +238,7 @@ final class SOCKS5Handshake: ChannelDuplexHandler, @unchecked Sendable {
     }
 
     private func fail(_ error: Error) {
-        guard stage != .failed else { return }
+        guard stage != .failed, stage != .done else { return }
         stage = .failed
         promise?.fail(error)
     }
