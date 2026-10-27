@@ -375,6 +375,8 @@ final class SFTPModel: ObservableObject {
     private var isConnecting = false
     private var transferWork: Task<Void, Error>?
     private var lastSample: (time: Date, done: Int64)?
+    /// Экран закрыт: соединение, которое ещё устанавливалось, нужно сразу закрыть.
+    private var closedByUser = false
 
     init(server: Server, password: String?) {
         self.server = server
@@ -432,7 +434,10 @@ final class SFTPModel: ObservableObject {
 
     /// Подключается (если ещё не подключены) и показывает домашнюю папку.
     func start() async {
+        closedByUser = false
         if let sftp, sftp.isActive { return }
+        // Старое (умершее) соединение закрываем, иначе оно останется висеть.
+        if !isConnecting, sftp != nil || connection != nil { teardown() }
         guard await openConnection(resetPath: true) else { return }
         await reload()
     }
@@ -456,9 +461,19 @@ final class SFTPModel: ObservableObject {
         }
         do {
             let connection = try await SSHConnector.connect(server, password: password)
+            if closedByUser {
+                await connection.close()
+                return false
+            }
             self.connection = connection
             do {
                 let sftp = try await connection.client.openSFTP()
+                if closedByUser {
+                    self.connection = nil
+                    try? await sftp.close()
+                    await connection.close()
+                    return false
+                }
                 self.sftp = sftp
             } catch {
                 self.connection = nil
@@ -502,6 +517,7 @@ final class SFTPModel: ObservableObject {
     }
 
     func close() {
+        closedByUser = true
         transferWork?.cancel()
         transferWork = nil
         teardown()

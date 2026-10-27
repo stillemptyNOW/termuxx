@@ -33,8 +33,15 @@ final class Store: ObservableObject {
     private func load() {
         isLoading = true
         defer { isLoading = false }
-        guard let data = try? Data(contentsOf: fileURL),
-              let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+        guard let data = try? Data(contentsOf: fileURL) else {
+            snippets = Store.defaultSnippets
+            return
+        }
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            // Файл есть, но не читается: сохраняем копию, чтобы следующая запись не стёрла серверы пользователя.
+            let stamp = Int(Date().timeIntervalSince1970)
+            let backup = fileURL.deletingLastPathComponent().appendingPathComponent("termuxx.broken-\(stamp).json")
+            try? data.write(to: backup, options: .atomic)
             snippets = Store.defaultSnippets
             return
         }

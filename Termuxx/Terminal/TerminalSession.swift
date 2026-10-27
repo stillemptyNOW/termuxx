@@ -109,6 +109,9 @@ final class TerminalSession: ObservableObject, Identifiable {
     private var hasStartedOnce = false
     private var retryCount = 0
     private var lastErrorWasFatal = false
+    /// Номер текущей попытки подключения. Старая попытка, которая ещё «догорает»
+    /// (например, после переподключения), не должна трогать новое соединение.
+    private var runGeneration = 0
 
     init(server: Server, password: String?) {
         self.server = server
@@ -195,6 +198,17 @@ final class TerminalSession: ObservableObject, Identifiable {
 
     func start() {
         task?.cancel()
+        // Предыдущую попытку гасим сразу: её ввод, туннели и соединение не должны
+        // пережить переподключение (старая задача может «догорать» ещё долго).
+        bridge.input?.finish()
+        bridge.input = nil
+        bridge.resize?.finish()
+        bridge.resize = nil
+        TunnelManager.shared.stopAll(sessionID: id)
+        if let old = connection {
+            connection = nil
+            Task { await old.close() }
+        }
         manuallyClosed = false
         trustRequest = nil
         state = .connecting
@@ -245,14 +259,18 @@ final class TerminalSession: ObservableObject, Identifiable {
         let isReconnect = hasStartedOnce
         hasStartedOnce = true
         lastErrorWasFatal = false
+        runGeneration &+= 1
+        let generation = runGeneration
         var droppedWhileConnected = false
+        var ownConnection: SSHConnection?
 
         do {
             let connection = try await SSHConnector.connect(server, password: password)
-            if Task.isCancelled {
+            if Task.isCancelled || generation != runGeneration {
                 await connection.close()
                 return
             }
+            ownConnection = connection
             self.connection = connection
             state = .connected
             retryCount = 0
@@ -260,6 +278,10 @@ final class TerminalSession: ObservableObject, Identifiable {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
 
             await TunnelManager.shared.startAuto(for: self)
+            if Task.isCancelled || generation != runGeneration {
+                finishConnection(connection, generation: generation)
+                return
+            }
 
             let terminal = terminalView.getTerminal()
             let cols = max(terminal.cols, 20)
@@ -293,6 +315,10 @@ final class TerminalSession: ObservableObject, Identifiable {
                 SSHChannelRequestEvent.EnvironmentRequest(wantReply: false, name: "COLORTERM", value: "truecolor"),
             ]
 
+            // Citadel завершает поток ошибкой CommandFailed, если shell вышел с ненулевым кодом
+            // (например, `exit` после Ctrl+C). Это обычное завершение сессии, а не обрыв.
+            var shellExitCode: Int?
+            do {
             try await connection.client.withPTY(request, environment: env) { inbound, outbound in
                 try await withThrowingTaskGroup(of: Void.self) { group in
                     group.addTask {
@@ -319,23 +345,27 @@ final class TerminalSession: ObservableObject, Identifiable {
                     group.cancelAll()
                 }
             }
+            } catch let failed as SSHClient.CommandFailed {
+                shellExitCode = failed.exitCode
+            }
             droppedWhileConnected = !(connection.isConnected)
-            finishConnection()
-            if !Task.isCancelled {
+            finishConnection(connection, generation: generation)
+            if !Task.isCancelled && generation == runGeneration {
                 if droppedWhileConnected {
                     echo("\r\n\u{1b}[33m⚠ Соединение потеряно\u{1b}[0m\r\n")
                     state = .closed("Соединение потеряно")
                     scheduleRetry()
                 } else {
-                    echo("\r\n\u{1b}[2m— Сессия завершена —\u{1b}[0m\r\n")
+                    let suffix = shellExitCode.map { " (код \($0))" } ?? ""
+                    echo("\r\n\u{1b}[2m— Сессия завершена\(suffix) —\u{1b}[0m\r\n")
                     manuallyClosed = true
                     state = .closed(nil)
                 }
             }
         } catch {
-            let wasConnected = connection != nil
-            finishConnection()
-            guard !Task.isCancelled else { return }
+            let wasConnected = ownConnection != nil
+            finishConnection(ownConnection, generation: generation)
+            guard !Task.isCancelled, generation == runGeneration else { return }
             if let request = error.hostKeyRequest {
                 trustRequest = request
                 lastErrorWasFatal = true
@@ -351,13 +381,20 @@ final class TerminalSession: ObservableObject, Identifiable {
         }
     }
 
-    private func finishConnection() {
-        bridge.input = nil
-        bridge.resize = nil
-        TunnelManager.shared.stopAll(sessionID: id)
-        let connection = self.connection
-        self.connection = nil
-        Task { await connection?.close() }
+    /// Закрывает соединение этой попытки. Общее состояние (ввод, туннели, `connection`)
+    /// трогаем, только если попытка всё ещё текущая.
+    private func finishConnection(_ own: SSHConnection?, generation: Int) {
+        if generation == runGeneration {
+            bridge.input = nil
+            bridge.resize = nil
+            TunnelManager.shared.stopAll(sessionID: id)
+            if let current = connection, own == nil || current === own {
+                connection = nil
+            }
+        }
+        if let own {
+            Task { await own.close() }
+        }
     }
 
     /// Автоматический повтор при обрыве (до 3 раз, если приложение на экране).
@@ -387,6 +424,9 @@ final class TerminalSession: ObservableObject, Identifiable {
 
     static func describe(_ error: Error) -> String {
         if let e = error as? LocalizedError, let d = e.errorDescription { return d }
+        if let failed = error as? SSHClient.CommandFailed {
+            return "Команда на сервере завершилась с кодом \(failed.exitCode)."
+        }
         let text = String(describing: error)
         if text.contains("allAuthenticationOptionsFailed") || text.contains("authentication") {
             return "Неверный логин, пароль или ключ."

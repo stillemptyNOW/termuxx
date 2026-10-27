@@ -182,6 +182,8 @@ final class ServerMonitor: ObservableObject {
     private var sampleCounter = 0
     private var lastServicesRefresh: Date?
     private var isRoot = false
+    /// Экран мониторинга закрыт: соединение, которое ещё устанавливалось, сразу закрываем.
+    private var isShutDown = false
 
     private let historyLimit = 60
     private let pollInterval: UInt64 = 3_000_000_000
@@ -197,6 +199,7 @@ final class ServerMonitor: ObservableObject {
 
     /// Запускает (или возобновляет) опрос.
     func start() {
+        isShutDown = false
         guard pollTask == nil, trustRequest == nil else { return }
         if case .failed = status { status = .idle }
         let id = UUID()
@@ -215,6 +218,7 @@ final class ServerMonitor: ObservableObject {
 
     /// Полностью останавливает монитор и закрывает соединение.
     func shutdown() {
+        isShutDown = true
         pause()
         let connection = self.connection
         self.connection = nil
@@ -294,7 +298,13 @@ final class ServerMonitor: ObservableObject {
         if let connection, connection.isConnected { return }
         if let pending = connectTask {
             // Кто-то уже подключается — ждём его, а не открываем второе соединение.
-            self.connection = try await pending.value
+            let connection = try await pending.value
+            if isShutDown {
+                if self.connection === connection { self.connection = nil }
+                await connection.close()
+                throw CancellationError()
+            }
+            self.connection = connection
             return
         }
         dropConnection()
@@ -307,6 +317,10 @@ final class ServerMonitor: ObservableObject {
         connectTask = task
         defer { connectTask = nil }
         let connection = try await task.value
+        if isShutDown {
+            await connection.close()
+            throw CancellationError()
+        }
         self.connection = connection
         prevCPU = nil
         prevNet = nil

@@ -287,6 +287,18 @@ struct LockView: View {
     private func authenticate() {
         let context = LAContext()
         context.localizedCancelTitle = "Отмена"
+        var policyError: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &policyError) else {
+            // Код-пароль на устройстве сняли — проверить личность нечем, иначе приложение
+            // заблокировалось бы навсегда. Снимаем блокировку и выключаем её в настройках.
+            if policyError?.code == LAError.Code.passcodeNotSet.rawValue {
+                UserDefaults.standard.set(false, forKey: "biometricLock")
+                onUnlock()
+            } else {
+                failed = true
+            }
+            return
+        }
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Разблокируйте Termuxx") { success, _ in
             DispatchQueue.main.async {
                 if success {
