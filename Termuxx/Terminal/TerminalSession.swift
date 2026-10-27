@@ -47,6 +47,42 @@ final class TerminalBridge: TerminalViewDelegate {
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 }
 
+/// Цели для жестов (UIKit требует NSObject).
+final class TerminalGestureTarget: NSObject {
+    weak var session: TerminalSession?
+    private var pinchAccumulator: CGFloat = 1
+
+    @MainActor @objc func swipe(_ g: UISwipeGestureRecognizer) {
+        guard let session else { return }
+        switch g.direction {
+        case .left: session.sendKey(.left)
+        case .right: session.sendKey(.right)
+        case .up: session.sendKey(.up)
+        case .down: session.sendKey(.down)
+        default: break
+        }
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
+    @MainActor @objc func pinch(_ g: UIPinchGestureRecognizer) {
+        guard let session else { return }
+        switch g.state {
+        case .began:
+            pinchAccumulator = 1
+        case .changed:
+            if g.scale / pinchAccumulator > 1.12 {
+                session.adjustFont(by: 1)
+                pinchAccumulator = g.scale
+            } else if g.scale / pinchAccumulator < 0.89 {
+                session.adjustFont(by: -1)
+                pinchAccumulator = g.scale
+            }
+        default:
+            break
+        }
+    }
+}
+
 @MainActor
 final class TerminalSession: ObservableObject, Identifiable {
     enum State: Equatable {
@@ -59,14 +95,20 @@ final class TerminalSession: ObservableObject, Identifiable {
     let server: Server
     let terminalView: TerminalView
     private let bridge = TerminalBridge()
+    private let gestureTarget = TerminalGestureTarget()
 
     @Published private(set) var state: State = .connecting
     @Published var title: String
     @Published private(set) var startedAt = Date()
+    @Published var trustRequest: HostKeyRequest?
 
     private(set) var password: String?
+    private(set) var connection: SSHConnection?
+    private(set) var manuallyClosed = false
     private var task: Task<Void, Never>?
-    private var client: SSHClient?
+    private var hasStartedOnce = false
+    private var retryCount = 0
+    private var lastErrorWasFatal = false
 
     init(server: Server, password: String?) {
         self.server = server
@@ -75,12 +117,14 @@ final class TerminalSession: ObservableObject, Identifiable {
         self.terminalView = TerminalView(frame: CGRect(x: 0, y: 0, width: 390, height: 600))
         terminalView.terminalDelegate = bridge
         terminalView.optionAsMetaKey = true
+        terminalView.inputAccessoryView = KeyBar(terminalView: terminalView)
         bridge.onTitle = { [weak self] title in
             DispatchQueue.main.async {
                 guard let self, !title.isEmpty else { return }
                 self.title = title
             }
         }
+        installGestures()
         applyAppearance()
     }
 
@@ -89,29 +133,63 @@ final class TerminalSession: ObservableObject, Identifiable {
         return true
     }
 
+    // MARK: Внешний вид и ввод
+
+    private func installGestures() {
+        gestureTarget.session = self
+        // Двумя пальцами — стрелки, одним — прокрутка истории.
+        terminalView.panGestureRecognizer.maximumNumberOfTouches = 1
+        for direction: UISwipeGestureRecognizer.Direction in [.left, .right, .up, .down] {
+            let swipe = UISwipeGestureRecognizer(target: gestureTarget, action: #selector(TerminalGestureTarget.swipe(_:)))
+            swipe.direction = direction
+            swipe.numberOfTouchesRequired = 2
+            terminalView.addGestureRecognizer(swipe)
+        }
+        let pinch = UIPinchGestureRecognizer(target: gestureTarget, action: #selector(TerminalGestureTarget.pinch(_:)))
+        terminalView.addGestureRecognizer(pinch)
+    }
+
     func applyAppearance() {
         let defaults = UserDefaults.standard
-        let size = defaults.object(forKey: "fontSize") as? Double ?? 13
+        let size = CGFloat(defaults.object(forKey: "fontSize") as? Double ?? 13)
+        let fontName = defaults.string(forKey: "fontName") ?? TerminalFont.defaultName
         let theme = TerminalTheme.by(id: defaults.string(forKey: "themeID") ?? "termuxx")
-        terminalView.font = UIFont.monospacedSystemFont(ofSize: CGFloat(size), weight: .regular)
+        terminalView.font = TerminalFont.uiFont(name: fontName, size: size)
         terminalView.nativeBackgroundColor = theme.uiBackground
         terminalView.nativeForegroundColor = theme.uiForeground
         terminalView.caretColor = theme.uiCursor
         terminalView.installColors(theme.swiftTermColors)
         terminalView.backgroundColor = theme.uiBackground
+        (terminalView.inputAccessoryView as? KeyBar)?.rebuild()
     }
 
     func adjustFont(by delta: Double) {
         let defaults = UserDefaults.standard
         let size = (defaults.object(forKey: "fontSize") as? Double ?? 13) + delta
-        defaults.set(min(max(size, 8), 28), forKey: "fontSize")
-        applyAppearance()
+        defaults.set(min(max(size, 7), 32), forKey: "fontSize")
+        SessionManager.shared.refreshAppearance()
     }
 
-    // MARK: Connection
+    func send(_ text: String) {
+        bridge.input?.yield(Data(text.utf8))
+    }
+
+    func sendKey(_ key: KeyBarItem) {
+        if let bytes = key.bytes(applicationCursor: terminalView.getTerminal().applicationCursor) {
+            bridge.input?.yield(Data(bytes))
+        }
+    }
+
+    func focus() {
+        _ = terminalView.becomeFirstResponder()
+    }
+
+    // MARK: Подключение
 
     func start() {
         task?.cancel()
+        manuallyClosed = false
+        trustRequest = nil
         state = .connecting
         startedAt = Date()
         task = Task { [weak self] in
@@ -119,16 +197,32 @@ final class TerminalSession: ObservableObject, Identifiable {
         }
     }
 
-    func send(_ text: String) {
-        bridge.input?.yield(Data(text.utf8))
+    func trustAndReconnect() {
+        trustRequest?.trust()
+        trustRequest = nil
+        start()
     }
 
     func disconnect() {
+        manuallyClosed = true
         task?.cancel()
-        let client = self.client
-        Task { try? await client?.close() }
+        let connection = self.connection
+        self.connection = nil
         bridge.input?.finish()
+        bridge.input = nil
+        TunnelManager.shared.stopAll(sessionID: id)
+        Task { await connection?.close() }
         state = .closed("Отключено")
+    }
+
+    /// Нужно ли переподключиться при возврате в приложение.
+    var needsReconnect: Bool {
+        guard server.autoReconnect, !manuallyClosed, !lastErrorWasFatal, trustRequest == nil else { return false }
+        switch state {
+        case .closed: return true
+        case .connected: return !(connection?.isConnected ?? false)
+        case .connecting: return false
+        }
     }
 
     private func echo(_ text: String) {
@@ -136,12 +230,29 @@ final class TerminalSession: ObservableObject, Identifiable {
     }
 
     private func run() async {
-        echo("\u{1b}[2m→ Подключение к \(server.subtitle)…\u{1b}[0m\r\n")
+        if hasStartedOnce {
+            echo("\r\n\u{1b}[2m— переподключение к \(server.subtitle) —\u{1b}[0m\r\n")
+        } else {
+            echo("\u{1b}[2m→ Подключение к \(server.subtitle)…\u{1b}[0m\r\n")
+        }
+        let isReconnect = hasStartedOnce
+        hasStartedOnce = true
+        lastErrorWasFatal = false
+        var droppedWhileConnected = false
+
         do {
-            let client = try await SSHConnector.connect(server, password: password)
-            self.client = client
+            let connection = try await SSHConnector.connect(server, password: password)
+            if Task.isCancelled {
+                await connection.close()
+                return
+            }
+            self.connection = connection
             state = .connected
+            retryCount = 0
             echo("\u{1b}[32m✓ Подключено\u{1b}[0m\r\n")
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+            await TunnelManager.shared.startAuto(for: self)
 
             let terminal = terminalView.getTerminal()
             let cols = max(terminal.cols, 20)
@@ -152,7 +263,12 @@ final class TerminalSession: ObservableObject, Identifiable {
             bridge.input = inputCont
             bridge.resize = resizeCont
 
-            if let snippetID = server.startupSnippetID, let snippet = Store.shared.snippet(snippetID) {
+            if server.useTmux {
+                let tmux = " printf '\\033[2J\\033[H'; if command -v tmux >/dev/null 2>&1; then exec tmux new-session -A -s termuxx; else echo 'tmux не установлен: apt install tmux'; fi\n"
+                inputCont.yield(Data(tmux.utf8))
+            }
+            if !(server.useTmux && isReconnect),
+               let snippetID = server.startupSnippetID, let snippet = Store.shared.snippet(snippetID) {
                 inputCont.yield(Data((snippet.command + "\n").utf8))
             }
 
@@ -170,7 +286,7 @@ final class TerminalSession: ObservableObject, Identifiable {
                 SSHChannelRequestEvent.EnvironmentRequest(wantReply: false, name: "COLORTERM", value: "truecolor"),
             ]
 
-            try await client.withPTY(request, environment: env) { inbound, outbound in
+            try await connection.client.withPTY(request, environment: env) { inbound, outbound in
                 try await withThrowingTaskGroup(of: Void.self) { group in
                     group.addTask {
                         for await data in inputStream {
@@ -196,21 +312,59 @@ final class TerminalSession: ObservableObject, Identifiable {
                     group.cancelAll()
                 }
             }
-            bridge.input = nil
-            bridge.resize = nil
-            try? await client.close()
+            droppedWhileConnected = !(connection.isConnected)
+            finishConnection()
             if !Task.isCancelled {
-                echo("\r\n\u{1b}[2m— Сессия завершена —\u{1b}[0m\r\n")
-                state = .closed(nil)
+                if droppedWhileConnected {
+                    echo("\r\n\u{1b}[33m⚠ Соединение потеряно\u{1b}[0m\r\n")
+                    state = .closed("Соединение потеряно")
+                    scheduleRetry()
+                } else {
+                    echo("\r\n\u{1b}[2m— Сессия завершена —\u{1b}[0m\r\n")
+                    manuallyClosed = true
+                    state = .closed(nil)
+                }
             }
         } catch {
-            bridge.input = nil
-            bridge.resize = nil
-            if let client { try? await client.close() }
+            let wasConnected = connection != nil
+            finishConnection()
             guard !Task.isCancelled else { return }
+            if let request = error.hostKeyRequest {
+                trustRequest = request
+                lastErrorWasFatal = true
+                echo("\r\n\u{1b}[33m? Новый сервер. Отпечаток ключа:\r\n  \(request.fingerprint)\u{1b}[0m\r\n")
+                state = .closed("Подтвердите ключ сервера")
+                return
+            }
             let message = Self.describe(error)
+            lastErrorWasFatal = Self.isFatal(error)
             echo("\r\n\u{1b}[31m✗ \(message.replacingOccurrences(of: "\n", with: "\r\n"))\u{1b}[0m\r\n")
             state = .closed(message)
+            if wasConnected || !lastErrorWasFatal { scheduleRetry() }
+        }
+    }
+
+    private func finishConnection() {
+        bridge.input = nil
+        bridge.resize = nil
+        TunnelManager.shared.stopAll(sessionID: id)
+        let connection = self.connection
+        self.connection = nil
+        Task { await connection?.close() }
+    }
+
+    /// Автоматический повтор при обрыве (до 3 раз, если приложение на экране).
+    private func scheduleRetry() {
+        guard server.autoReconnect, !manuallyClosed, !lastErrorWasFatal, retryCount < 3 else { return }
+        guard UIApplication.shared.applicationState == .active else { return }
+        retryCount += 1
+        let delay = UInt64(retryCount) * 2_000_000_000
+        echo("\u{1b}[2m  повтор через \(retryCount * 2) с…\u{1b}[0m\r\n")
+        task = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard let self, !Task.isCancelled, !self.manuallyClosed, !self.isAlive else { return }
+            self.state = .connecting
+            await self.run()
         }
     }
 
@@ -218,17 +372,32 @@ final class TerminalSession: ObservableObject, Identifiable {
         terminalView.feed(byteArray: bytes[...])
     }
 
+    static func isFatal(_ error: Error) -> Bool {
+        if error is TermuxxError { return true }
+        let text = String(describing: error)
+        return text.contains("allAuthenticationOptionsFailed") || text.contains("unsupported")
+    }
+
     static func describe(_ error: Error) -> String {
         if let e = error as? LocalizedError, let d = e.errorDescription { return d }
         let text = String(describing: error)
-        if text.contains("authentication") || text.contains("allAuthenticationOptionsFailed") {
+        if text.contains("allAuthenticationOptionsFailed") || text.contains("authentication") {
             return "Неверный логин, пароль или ключ."
+        }
+        if text.contains("unsupportedPasswordAuthentication") {
+            return "Сервер не разрешает вход по паролю — используйте ключ."
         }
         if text.contains("connectTimeout") || text.contains("timeout") {
             return "Сервер не отвечает (таймаут)."
         }
         if text.contains("connectionRefused") || text.contains("refused") {
             return "Соединение отклонено. Проверьте адрес и порт."
+        }
+        if text.contains("nameResolution") || text.contains("NXDOMAIN") || text.contains("getaddrinfo") {
+            return "Не удалось найти сервер по имени. Проверьте адрес."
+        }
+        if text.contains("ioOnClosedChannel") || text.contains("Disconnected") {
+            return "Соединение закрыто сервером."
         }
         return text
     }
@@ -246,7 +415,7 @@ final class SessionManager: ObservableObject {
         return session
     }
 
-    func session(_ id: UUID) -> TerminalSession? {
+    func session(_ id: UUID?) -> TerminalSession? {
         sessions.first { $0.id == id }
     }
 
@@ -255,7 +424,20 @@ final class SessionManager: ObservableObject {
         sessions.removeAll { $0.id == session.id }
     }
 
+    func neighbour(of id: UUID, offset: Int) -> TerminalSession? {
+        guard let i = sessions.firstIndex(where: { $0.id == id }), !sessions.isEmpty else { return nil }
+        let j = (i + offset + sessions.count) % sessions.count
+        return sessions[j]
+    }
+
     func refreshAppearance() {
         sessions.forEach { $0.applyAppearance() }
+    }
+
+    /// Вызывается при возврате приложения на экран.
+    func appDidBecomeActive() {
+        for session in sessions where session.needsReconnect {
+            session.start()
+        }
     }
 }

@@ -26,6 +26,40 @@ struct Server: Identifiable, Codable, Hashable {
     var startupSnippetID: UUID?
     var colorHex: String = HostColor.palette[0]
     var lastConnected: Date?
+    // v1.1
+    var useTmux: Bool = false
+    var autoReconnect: Bool = true
+    var keepAlive: Bool = true
+    var jumpHostID: UUID?
+    var proxy: ProxyConfig?
+    var forwards: [PortForward] = []
+
+    init() {}
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, hostname, port, username, auth, keyID, startupSnippetID, colorHex, lastConnected
+        case useTmux, autoReconnect, keepAlive, jumpHostID, proxy, forwards
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        hostname = try c.decodeIfPresent(String.self, forKey: .hostname) ?? ""
+        port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 22
+        username = try c.decodeIfPresent(String.self, forKey: .username) ?? "root"
+        auth = try c.decodeIfPresent(AuthMethod.self, forKey: .auth) ?? .password
+        keyID = try c.decodeIfPresent(UUID.self, forKey: .keyID)
+        startupSnippetID = try c.decodeIfPresent(UUID.self, forKey: .startupSnippetID)
+        colorHex = try c.decodeIfPresent(String.self, forKey: .colorHex) ?? HostColor.palette[0]
+        lastConnected = try c.decodeIfPresent(Date.self, forKey: .lastConnected)
+        useTmux = try c.decodeIfPresent(Bool.self, forKey: .useTmux) ?? false
+        autoReconnect = try c.decodeIfPresent(Bool.self, forKey: .autoReconnect) ?? true
+        keepAlive = try c.decodeIfPresent(Bool.self, forKey: .keepAlive) ?? true
+        jumpHostID = try c.decodeIfPresent(UUID.self, forKey: .jumpHostID)
+        proxy = try c.decodeIfPresent(ProxyConfig.self, forKey: .proxy)
+        forwards = try c.decodeIfPresent([PortForward].self, forKey: .forwards) ?? []
+    }
 
     var title: String { name.isEmpty ? hostname : name }
     var subtitle: String { "\(username)@\(hostname)" + (port == 22 ? "" : ":\(port)") }
@@ -58,6 +92,27 @@ struct SSHKeyItem: Identifiable, Codable, Hashable {
     var type: String
     var publicKey: String
     var created = Date()
+    var encrypted: Bool? = nil
+}
+
+/// SOCKS5-прокси, через который идёт TCP-подключение к серверу.
+struct ProxyConfig: Codable, Hashable {
+    var host: String = ""
+    var port: Int = 1080
+    var username: String = ""
+}
+
+/// Локальный проброс порта: 127.0.0.1:localPort на телефоне → remoteHost:remotePort со стороны сервера.
+struct PortForward: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String = ""
+    var localPort: Int = 8080
+    var remoteHost: String = "127.0.0.1"
+    var remotePort: Int = 80
+    var autoStart: Bool = true
+
+    var title: String { name.isEmpty ? "localhost:\(localPort) → \(remoteHost):\(remotePort)" : name }
+    var localURL: URL? { URL(string: "http://127.0.0.1:\(localPort)") }
 }
 
 struct Snippet: Identifiable, Codable, Hashable {

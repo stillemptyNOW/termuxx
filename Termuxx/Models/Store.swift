@@ -64,7 +64,15 @@ final class Store: ObservableObject {
     func delete(_ host: Server) {
         hosts.removeAll { $0.id == host.id }
         Keychain.delete("pw.\(host.id)")
+        Keychain.delete("proxy.\(host.id)")
+        for i in hosts.indices where hosts[i].jumpHostID == host.id {
+            hosts[i].jumpHostID = nil
+        }
     }
+
+    func proxyPassword(for host: Server) -> String? { Keychain.get("proxy.\(host.id)") }
+    func setProxyPassword(_ password: String?, for host: Server) { Keychain.set(password, for: "proxy.\(host.id)") }
+    func host(_ id: UUID?) -> Server? { hosts.first { $0.id == id } }
 
     func markConnected(_ host: Server) {
         guard let i = hosts.firstIndex(where: { $0.id == host.id }) else { return }
@@ -78,13 +86,17 @@ final class Store: ObservableObject {
 
     func privateKey(_ id: UUID) -> String? { Keychain.get("key.\(id)") }
 
-    func addKey(_ item: SSHKeyItem, privateKey: String) {
+    func passphrase(_ id: UUID) -> String? { Keychain.get("keypass.\(id)") }
+
+    func addKey(_ item: SSHKeyItem, privateKey: String, passphrase: String? = nil) {
         Keychain.set(privateKey, for: "key.\(item.id)")
+        Keychain.set(passphrase, for: "keypass.\(item.id)")
         keys.append(item)
     }
 
     func deleteKey(_ item: SSHKeyItem) {
         Keychain.delete("key.\(item.id)")
+        Keychain.delete("keypass.\(item.id)")
         keys.removeAll { $0.id == item.id }
         for i in hosts.indices where hosts[i].keyID == item.id {
             hosts[i].keyID = nil
