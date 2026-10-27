@@ -497,8 +497,11 @@ if _HAVE_GTK:
                 elif st.state == "error":
                     text = f"Ошибка: {st.error}"
                 else:
-                    text = (f"Работает · {st.url} · соединений: {st.connections}"
-                            f" · ↓ {GLib.format_size(st.bytes_in)} ↑ {GLib.format_size(st.bytes_out)}")
+                    text = f"Работает · 127.0.0.1:{_fattr(st.forward, 'local_port', 0)}"
+                    if st.connections:
+                        text += f" · активных соединений: {st.connections}"
+                    if st.bytes_in or st.bytes_out:
+                        text += f" · ↓ {GLib.format_size(st.bytes_in)} ↑ {GLib.format_size(st.bytes_out)}"
                     if st.error:
                         text += f"\n{st.error}"
                 row.set_subtitle(GLib.markup_escape_text(text))

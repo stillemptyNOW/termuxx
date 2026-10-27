@@ -283,6 +283,8 @@ levelbar.termuxx-meter block { border-radius: 99px; }
 .termuxx-dot-ok { color: #3ddc97; }
 .termuxx-dot-bad { color: #ff5c6c; }
 .termuxx-dot-off { color: alpha(currentColor, 0.35); }
+.termuxx-blue { color: #4ea8ff; }
+.termuxx-rate { font-size: 15pt; font-weight: 700; font-feature-settings: "tnum"; }
 """
 _css_installed = False
 
@@ -330,15 +332,22 @@ class Sparkline(Gtk.DrawingArea):
         self.queue_draw()
 
     def _draw(self, _area, cr, width, height, _data=None):
-        top = self.fixed_max or max([max(s) for s in self.series if s] + [1e-9])
-        top = top * 1.1 if not self.fixed_max else top
+        # Пунктирные линии сетки — чтобы область графика была видна даже без данных.
+        cr.set_source_rgba(1, 1, 1, 0.07)
+        cr.set_line_width(1)
+        cr.set_dash([3, 4])
+        for frac in (0.25, 0.5, 0.75):
+            y = round(height * frac) + 0.5
+            cr.move_to(0, y)
+            cr.line_to(width, y)
+            cr.stroke()
+        cr.set_dash([])
+        top = self.fixed_max or max([max(s) for s in self.series if s] + [1e-9]) * 1.15
         for series, (r, g, b) in zip(self.series, self.colors):
             if len(series) < 2:
                 continue
-            step = width / (HISTORY - 1)
-            offset = width - step * (len(series) - 1)
-            points = [(offset + i * step, height - 2 - (height - 4) * min(v / top, 1.0))
-                      for i, v in enumerate(series)]
+            step = width / (len(series) - 1)
+            points = [(i * step, height - 2 - (height - 4) * min(v / top, 1.0)) for i, v in enumerate(series)]
             cr.move_to(points[0][0], height)
             for x, y in points:
                 cr.line_to(x, y)
@@ -356,7 +365,7 @@ class Sparkline(Gtk.DrawingArea):
 
 def _card(title: str, icon: str) -> tuple[Gtk.Box, Gtk.Box]:
     card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, css_classes=["card", "termuxx-card"])
-    card.set_size_request(240, -1)
+    card.set_size_request(200, -1)
     head = Gtk.Box(spacing=8)
     head.append(Gtk.Image(icon_name=icon, css_classes=["dim-label"]))
     head.append(Gtk.Label(label=title, xalign=0, css_classes=["heading"], hexpand=True))
@@ -449,47 +458,45 @@ class MonitorWindow(Adw.Window):
         page.append(hero)
 
         # Карточки
-        flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True,
-                           min_children_per_line=1, max_children_per_line=4,
-                           column_spacing=12, row_spacing=12)
+        flow = Gtk.Grid(column_homogeneous=True, column_spacing=12, row_spacing=12)
 
-        cpu, body = _card("Процессор", "utilities-system-monitor-symbolic")
+        cpu, body = _card("Процессор", "computer-symbolic")
         self.cpu_value = Gtk.Label(xalign=0, label="—", css_classes=["termuxx-big"])
         self.cpu_bar = _meter()
         self.cpu_chart = Sparkline((ACCENT,), fixed_max=100)
-        self.cpu_detail = Gtk.Label(xalign=0, css_classes=["dim-label", "caption"], wrap=True)
+        self.cpu_detail = Gtk.Label(xalign=0, css_classes=["dim-label", "caption"], wrap=True, max_width_chars=28)
         for w in (self.cpu_value, self.cpu_bar, self.cpu_chart, self.cpu_detail):
             body.append(w)
-        flow.append(cpu)
+        flow.attach(cpu, 0, 0, 1, 1)
 
         mem, body = _card("Память", "drive-multidisk-symbolic")
         self.mem_value = Gtk.Label(xalign=0, label="—", css_classes=["termuxx-big"])
         self.mem_bar = _meter()
-        self.mem_detail = Gtk.Label(xalign=0, css_classes=["dim-label", "caption"], wrap=True)
-        self.swap_label = Gtk.Label(xalign=0, css_classes=["caption"], margin_top=6)
-        self.swap_bar = _meter()
-        for w in (self.mem_value, self.mem_bar, self.mem_detail, self.swap_label, self.swap_bar):
+        self.mem_chart = Sparkline((BLUE,), fixed_max=100)
+        self.mem_detail = Gtk.Label(xalign=0, css_classes=["dim-label", "caption"], wrap=True, max_width_chars=28)
+        self.swap_label = Gtk.Label(xalign=0, css_classes=["dim-label", "caption"])
+        for w in (self.mem_value, self.mem_bar, self.mem_chart, self.mem_detail, self.swap_label):
             body.append(w)
-        flow.append(mem)
-
-        disk, body = _card("Диски", "drive-harddisk-symbolic")
-        self.disk_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        body.append(self.disk_box)
-        flow.append(disk)
+        flow.attach(mem, 1, 0, 1, 1)
 
         net, body = _card("Сеть", "network-transmit-receive-symbolic")
-        rates = Gtk.Box(spacing=16)
-        self.rx_label = Gtk.Label(xalign=0, label="↓ —", css_classes=["title-3", "termuxx-dot-ok"])
-        self.tx_label = Gtk.Label(xalign=0, label="↑ —", css_classes=["title-3"])
-        self.tx_label.add_css_class("accent")
+        rates = Gtk.Box(spacing=12)
+        self.rx_label = Gtk.Label(xalign=0, label="↓ —", css_classes=["termuxx-rate", "termuxx-dot-ok"])
+        self.tx_label = Gtk.Label(xalign=0, label="↑ —", css_classes=["termuxx-rate", "termuxx-blue"])
         rates.append(self.rx_label)
         rates.append(self.tx_label)
         self.net_chart = Sparkline((ACCENT, BLUE))
-        self.net_detail = Gtk.Label(xalign=0, css_classes=["dim-label", "caption"])
+        self.net_detail = Gtk.Label(xalign=0, css_classes=["dim-label", "caption"], wrap=True, max_width_chars=28)
         for w in (rates, self.net_chart, self.net_detail):
             body.append(w)
-        flow.append(net)
+        flow.attach(net, 2, 0, 1, 1)
         page.append(flow)
+
+        # Диски
+        self.disk_group = Adw.PreferencesGroup(title="Диски")
+        self.disk_box = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["boxed-list"])
+        self.disk_group.add(self.disk_box)
+        page.append(self.disk_group)
 
         # Процессы
         self.proc_group = Adw.PreferencesGroup(title="Процессы", description="Топ по загрузке процессора")
@@ -661,32 +668,32 @@ class MonitorWindow(Adw.Window):
             frac = used / snap.mem_total
             self.mem_value.set_label(f"{frac * 100:.0f}%")
             self.mem_bar.set_value(frac)
+            self.mem_chart.push(frac * 100)
             self.mem_detail.set_label(f"{_fmt_kb(used)} из {_fmt_kb(snap.mem_total)} · свободно {_fmt_kb(snap.mem_available)}")
         if snap.swap_total:
             sused = snap.swap_total - snap.swap_free
             self.swap_label.set_label(f"Своп: {_fmt_kb(sused)} из {_fmt_kb(snap.swap_total)}")
-            self.swap_bar.set_value(sused / snap.swap_total)
-            self.swap_bar.set_visible(True)
         else:
             self.swap_label.set_label("Своп выключен")
-            self.swap_bar.set_visible(False)
 
         # Диски
         _clear(self.disk_box)
         if not snap.disks:
-            self.disk_box.append(Gtk.Label(label="Нет данных", xalign=0, css_classes=["dim-label"]))
+            self.disk_box.append(Adw.ActionRow(title="Нет данных"))
         for d in snap.disks:
-            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            top = Gtk.Box(spacing=6)
+            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
+                          margin_top=10, margin_bottom=10, margin_start=12, margin_end=12)
+            top = Gtk.Box(spacing=10)
             top.append(Gtk.Label(label=d.mount, xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.MIDDLE,
                                  css_classes=["monospace"]))
-            top.append(Gtk.Label(label=f"{d.fraction * 100:.0f}%", css_classes=["caption-heading"]))
+            top.append(Gtk.Label(label=f"{_fmt_kb(d.used_kb)} из {_fmt_kb(d.size_kb)}",
+                                 css_classes=["dim-label", "caption"]))
+            top.append(Gtk.Label(label=f"{d.fraction * 100:.0f}%", width_chars=5, xalign=1,
+                                 css_classes=["caption-heading", "numeric"]))
             row.append(top)
             bar = _meter()
             bar.set_value(min(1.0, d.fraction))
             row.append(bar)
-            row.append(Gtk.Label(label=f"{_fmt_kb(d.used_kb)} из {_fmt_kb(d.size_kb)}", xalign=0,
-                                 css_classes=["dim-label", "caption"]))
             self.disk_box.append(row)
 
         # Сеть

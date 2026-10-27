@@ -35,7 +35,9 @@ __all__ = [
     "describe_error",
     "ask_trust",
     "connect_interactive",
+    "ask_password",
     "run_in_thread",
+    "load_private_key",
 ]
 
 
@@ -631,11 +633,62 @@ def _show_error(parent, heading: str, body: str) -> None:
         d.present()
 
 
+def ask_password(parent, server, on_password: Callable[[str], None],
+                 on_cancel: Optional[Callable[[], None]] = None) -> None:
+    """Спрашивает пароль для сервера (если он не сохранён)."""
+    import gi
+
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw, GLib, Gtk
+
+    subtitle = _attr(server, "subtitle", default=None) or _server_title(server)
+    body = f"Пароль для {subtitle}"
+    entry = Gtk.PasswordEntry(show_peek_icon=True, activates_default=True, hexpand=True)
+    state = {"done": False}
+
+    def finish(ok: bool):
+        if state["done"]:
+            return
+        state["done"] = True
+        text = entry.get_text()
+        if ok and text:
+            on_password(text)
+        elif on_cancel:
+            on_cancel()
+
+    if hasattr(Adw, "AlertDialog"):
+        dialog = Adw.AlertDialog(heading="Вход на сервер", body=body)
+    else:
+        dialog = Adw.MessageDialog(transient_for=parent, heading="Вход на сервер", body=body)
+    dialog.set_extra_child(entry)
+    dialog.add_response("cancel", "Отмена")
+    dialog.add_response("ok", "Подключиться")
+    dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
+    dialog.set_default_response("ok")
+    dialog.set_close_response("cancel")
+    dialog.connect("response", lambda _d, r: finish(r == "ok"))
+
+    def on_activate(_e):
+        finish(True)
+        if hasattr(dialog, "force_close"):
+            dialog.force_close()
+        else:
+            dialog.close()
+
+    entry.connect("activate", on_activate)
+    if hasattr(Adw, "AlertDialog") and isinstance(dialog, Adw.AlertDialog):
+        dialog.present(parent)
+    else:
+        dialog.present()
+    GLib.timeout_add(80, lambda: (entry.grab_focus(), False)[1])
+
+
 def connect_interactive(parent, store, server, password: Optional[str],
                         on_connected: Callable[[Connection], None],
                         on_error: Callable[[BaseException], None],
                         timeout: float = 15) -> None:
-    """Подключается в фоне; на неизвестный ключ показывает диалог доверия и повторяет попытку."""
+    """Подключается в фоне; на неизвестный ключ показывает диалог доверия, без пароля — спрашивает его."""
 
     def failed(e: BaseException):
         if isinstance(e, UnknownHostKey):
@@ -644,6 +697,14 @@ def connect_interactive(parent, store, server, password: Optional[str],
                 on_trust=lambda: connect_interactive(parent, store, server, password,
                                                      on_connected, on_error, timeout),
                 on_cancel=lambda: on_error(SSHError("Подключение отменено: ключ сервера не подтверждён.")),
+            )
+            return
+        if isinstance(e, NoPassword) and not password:
+            ask_password(
+                parent, server,
+                on_password=lambda pw: connect_interactive(parent, store, server, pw,
+                                                           on_connected, on_error, timeout),
+                on_cancel=lambda: on_error(SSHError("Подключение отменено: пароль не указан.")),
             )
             return
         on_error(e)

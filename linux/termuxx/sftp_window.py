@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import posixpath
 import stat
-import tempfile
 import threading
 import time
 from datetime import datetime
@@ -451,7 +450,12 @@ class SFTPWindow(Adw.Window):
         label = icon.get_next_sibling()
         icon.set_from_gicon(item.gicon())
         label.set_label(item.name + (" →" if item.is_link else ""))
-        label.set_tooltip_text(f"{item.name} → {item.link_target}" if item.link_target else item.name)
+        if item.link_target:
+            label.set_tooltip_text(f"{item.name} → {item.link_target}")
+        elif len(item.name) > 48:
+            label.set_tooltip_text(item.name)
+        else:
+            label.set_tooltip_text(None)
         if item.hidden:
             label.add_css_class("dim-label")
         else:
@@ -556,6 +560,7 @@ class SFTPWindow(Adw.Window):
         self.act_hidden = hidden
         self.insert_action_group("sftp", group)
         self.actions = group
+        self.act_back.set_enabled(False)
 
     def _show_hidden(self) -> bool:
         return bool(self.act_hidden.get_state().get_boolean())
@@ -1156,7 +1161,7 @@ class SFTPWindow(Adw.Window):
         self.transfer_detail.set_label(
             f"{files}{_fmt_size(job.done)} из {_fmt_size(job.total)} · {_fmt_size(int(speed))}/с{left}{queue}"
         )
-        if job.current:
+        if job.current and job.files_total > 1:
             self.transfer_label.set_label(f"{job.title} — {job.current}")
         return True
 

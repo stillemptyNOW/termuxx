@@ -48,7 +48,7 @@ struct HostKeyRequest: Identifiable, Equatable {
 
 extension Error {
     var hostKeyRequest: HostKeyRequest? {
-        if case TermuxxError.unknownHostKey(let r) = self { return r }
+        if let error = self as? TermuxxError, case .unknownHostKey(let r) = error { return r }
         return nil
     }
 }
