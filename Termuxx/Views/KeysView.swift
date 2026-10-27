@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import Citadel
+import NIO
 
 struct KeysView: View {
     @EnvironmentObject var store: Store
@@ -18,23 +19,12 @@ struct KeysView: View {
                     NavigationLink {
                         KeyDetailView(key: key)
                     } label: {
-                        HStack(spacing: 14) {
-                            Image(systemName: "key.horizontal.fill")
-                                .font(.title3)
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 32)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(key.name).font(.body.weight(.semibold))
-                                Text("\(key.type) · \(key.created.formatted(date: .abbreviated, time: .omitted))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 2)
+                        KeyRow(key: key)
                     }
                 }
                 .onDelete { idx in
-                    idx.map { store.keys[$0] }.forEach(store.deleteKey)
+                    let items = idx.map { store.keys[$0] }
+                    for item in items { store.deleteKey(item) }
                 }
             }
             .overlay {
@@ -44,8 +34,22 @@ struct KeysView: View {
                     } description: {
                         Text("Вход по ключу надёжнее пароля. Создайте ключ и установите его на сервер в одно касание.")
                     } actions: {
-                        Button("Создать ключ") { newName = "termuxx"; askGenerateName = true }
-                            .buttonStyle(.borderedProminent)
+                        Button {
+                            newName = "termuxx"
+                            askGenerateName = true
+                        } label: {
+                            Label("Создать ключ", systemImage: "wand.and.stars")
+                                .padding(.horizontal, 6)
+                        }
+                        .glassButtonStyle(prominent: true)
+                        Button {
+                            importText = UIPasteboard.general.string ?? ""
+                            showImport = true
+                        } label: {
+                            Label("Импортировать", systemImage: "square.and.arrow.down")
+                                .padding(.horizontal, 6)
+                        }
+                        .glassButtonStyle()
                     }
                 }
             }
@@ -63,7 +67,7 @@ struct KeysView: View {
                             Label("Импорт из файла", systemImage: "folder")
                         }
                     } label: {
-                        Image(systemName: "plus.circle.fill").font(.title3)
+                        Image(systemName: "plus")
                     }
                 }
             }
@@ -71,10 +75,12 @@ struct KeysView: View {
                 TextField("Имя", text: $newName)
                 Button("Создать") { generate() }
                 Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("Будет создан ключ Ed25519. Приватная часть останется в Keychain этого устройства.")
             }
             .sheet(isPresented: $showImport) {
                 NavigationStack {
-                    ImportKeyView(initialText: importText)
+                    ImportKeyView(text: importText)
                 }
             }
             .fileImporter(isPresented: $showFileImport, allowedContentTypes: [.item]) { result in
@@ -101,12 +107,43 @@ struct KeysView: View {
     }
 }
 
+struct KeyRow: View {
+    let key: SSHKeyItem
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "key.horizontal.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 32, height: 32)
+                if key.encrypted == true {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.orange)
+                        .offset(x: 2, y: 2)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(key.name).font(.body.weight(.semibold))
+                Text(verbatim: "\(key.type) · \(key.created.formatted(date: .abbreviated, time: .omitted))" + (key.encrypted == true ? " · с паролем" : ""))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
 struct ImportKeyView: View {
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) private var dismiss
-    @State var initialText: String
+    @State var text: String
     @State private var name = ""
+    @State private var passphrase = ""
     @State private var error: String?
+
+    private var isEncrypted: Bool { KeyTools.isEncrypted(text) }
 
     var body: some View {
         Form {
@@ -114,21 +151,36 @@ struct ImportKeyView: View {
                 TextField("Например, laptop", text: $name)
             }
             Section {
-                TextEditor(text: $initialText)
+                TextEditor(text: $text)
                     .font(.caption.monospaced())
                     .frame(minHeight: 220)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                Button("Вставить из буфера") {
-                    initialText = UIPasteboard.general.string ?? ""
+                Button {
+                    text = UIPasteboard.general.string ?? ""
+                } label: {
+                    Label("Вставить из буфера", systemImage: "doc.on.clipboard")
                 }
             } header: {
                 Text("Приватный ключ")
             } footer: {
-                Text("Формат OpenSSH (-----BEGIN OPENSSH PRIVATE KEY-----). Поддерживаются Ed25519 и RSA без пароля.")
+                Text("Формат OpenSSH (-----BEGIN OPENSSH PRIVATE KEY-----). Поддерживаются Ed25519 и RSA, в том числе защищённые паролем.")
+            }
+            if isEncrypted {
+                Section {
+                    SecureField("Пароль от ключа", text: $passphrase)
+                } header: {
+                    Label("Ключ защищён паролем", systemImage: "lock.fill")
+                } footer: {
+                    Text("Пароль сохранится в Keychain, чтобы не вводить его при каждом подключении.")
+                }
             }
             if let error {
-                Text(error).foregroundStyle(.red).font(.footnote)
+                Section {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .font(.footnote)
+                }
             }
         }
         .navigationTitle("Импорт ключа")
@@ -137,17 +189,23 @@ struct ImportKeyView: View {
             ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Сохранить") { save() }
-                    .disabled(initialText.isEmpty)
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (isEncrypted && passphrase.isEmpty))
             }
         }
     }
 
     private func save() {
         let keyName = name.trimmingCharacters(in: .whitespaces).isEmpty ? "Импортированный ключ" : name
+        let pem = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let encrypted = KeyTools.isEncrypted(pem)
+        if encrypted && passphrase.isEmpty {
+            error = "Ключ защищён паролем — введите его."
+            return
+        }
         do {
-            let info = try KeyTools.inspect(privateKey: initialText, comment: keyName)
-            store.addKey(SSHKeyItem(name: keyName, type: info.type, publicKey: info.publicKey),
-                         privateKey: initialText.trimmingCharacters(in: .whitespacesAndNewlines))
+            let info = try KeyTools.inspect(privateKey: pem, passphrase: encrypted ? passphrase : nil, comment: keyName)
+            let item = SSHKeyItem(name: keyName, type: info.type, publicKey: info.publicKey, encrypted: encrypted ? true : nil)
+            store.addKey(item, privateKey: pem, passphrase: encrypted ? passphrase : nil)
             dismiss()
         } catch {
             self.error = TerminalSession.describe(error)
@@ -166,11 +224,16 @@ struct KeyDetailView: View {
             Section("Ключ") {
                 LabeledContent("Имя", value: key.name)
                 LabeledContent("Тип", value: key.type)
+                LabeledContent("Пароль", value: key.encrypted == true ? "есть" : "нет")
                 LabeledContent("Создан", value: key.created.formatted(date: .abbreviated, time: .shortened))
+                let users = store.hosts.filter { $0.auth == .key && $0.keyID == key.id }
+                if !users.isEmpty {
+                    LabeledContent("Используется", value: users.map(\.title).joined(separator: ", "))
+                }
             }
             if !key.publicKey.isEmpty {
                 Section {
-                    Text(key.publicKey)
+                    Text(verbatim: key.publicKey)
                         .font(.caption.monospaced())
                         .textSelection(.enabled)
                     Button {
@@ -194,6 +257,12 @@ struct KeyDetailView: View {
                         Label("Установить на сервер…", systemImage: "arrow.up.doc.on.clipboard")
                     }
                 }
+            } else {
+                Section {
+                    Text("Публичная часть недоступна. Импортируйте ключ заново, чтобы установить его на сервер из приложения.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle(key.name)
@@ -213,6 +282,7 @@ struct InstallKeyView: View {
     @State private var switchToKey = true
     @State private var working = false
     @State private var result: String?
+    @State private var trustRequest: HostKeyRequest?
 
     var body: some View {
         Form {
@@ -224,6 +294,7 @@ struct InstallKeyView: View {
                     Button {
                         selected = server
                         password = store.password(for: server) ?? ""
+                        result = nil
                     } label: {
                         HStack {
                             HostRow(server: server)
@@ -235,8 +306,12 @@ struct InstallKeyView: View {
                 }
             }
             if let selected, selected.auth == .password {
-                Section("Текущий пароль") {
+                Section {
                     SecureField("Пароль", text: $password)
+                } header: {
+                    Text("Текущий пароль")
+                } footer: {
+                    Text("Нужен один раз, чтобы добавить ключ в authorized_keys.")
                 }
             }
             Section {
@@ -259,6 +334,9 @@ struct InstallKeyView: View {
                 }
             }
         }
+        .hostKeyAlert($trustRequest) {
+            Task { await install() }
+        }
     }
 
     private func install() async {
@@ -266,9 +344,18 @@ struct InstallKeyView: View {
         working = true
         defer { working = false }
         do {
-            let client = try await SSHConnector.connect(server, password: password.isEmpty ? nil : password)
-            let output = try await client.executeCommand(KeyTools.installCommand(publicKey: key.publicKey), mergeStreams: true)
-            try? await client.close()
+            let connection = try await SSHConnector.connect(server, password: password.isEmpty ? nil : password)
+            let output: ByteBuffer
+            do {
+                output = try await connection.client.executeCommand(
+                    KeyTools.installCommand(publicKey: key.publicKey),
+                    mergeStreams: true
+                )
+            } catch {
+                await connection.close()
+                throw error
+            }
+            await connection.close()
             let text = String(buffer: output).trimmingCharacters(in: .whitespacesAndNewlines)
             if text.hasSuffix("OK") {
                 if switchToKey {
@@ -276,12 +363,18 @@ struct InstallKeyView: View {
                     updated.auth = .key
                     updated.keyID = key.id
                     store.upsert(updated)
+                    selected = updated
                 }
                 result = "✅ Ключ установлен на \(server.title)." + (switchToKey ? " Теперь вход — по ключу." : "")
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
             } else {
                 result = "Сервер ответил: \(text)"
             }
         } catch {
+            if let request = error.hostKeyRequest {
+                trustRequest = request
+                return
+            }
             result = "❌ " + TerminalSession.describe(error)
         }
     }

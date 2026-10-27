@@ -154,7 +154,7 @@ final class TerminalSession: ObservableObject, Identifiable {
         let size = CGFloat(defaults.object(forKey: "fontSize") as? Double ?? 13)
         let fontName = defaults.string(forKey: "fontName") ?? TerminalFont.defaultName
         let theme = TerminalTheme.by(id: defaults.string(forKey: "themeID") ?? "termuxx")
-        terminalView.font = TerminalFont.uiFont(name: fontName, size: size)
+        TerminalFont.apply(name: fontName, size: size, to: terminalView)
         terminalView.nativeBackgroundColor = theme.uiBackground
         terminalView.nativeForegroundColor = theme.uiForeground
         terminalView.caretColor = theme.uiCursor
@@ -170,14 +170,21 @@ final class TerminalSession: ObservableObject, Identifiable {
         SessionManager.shared.refreshAppearance()
     }
 
+    /// Отправляет текст так, будто его набрали (с прокруткой к курсору).
     func send(_ text: String) {
-        bridge.input?.yield(Data(text.utf8))
+        guard !text.isEmpty else { return }
+        terminalView.send(txt: text)
     }
 
     func sendKey(_ key: KeyBarItem) {
         if let bytes = key.bytes(applicationCursor: terminalView.getTerminal().applicationCursor) {
-            bridge.input?.yield(Data(bytes))
+            terminalView.send(bytes)
         }
+    }
+
+    /// Вставка из буфера обмена (с учётом bracketed paste).
+    func paste() {
+        terminalView.paste(nil)
     }
 
     func focus() {

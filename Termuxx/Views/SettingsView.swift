@@ -4,6 +4,7 @@ import LocalAuthentication
 struct SettingsView: View {
     @EnvironmentObject var sessions: SessionManager
     @AppStorage("fontSize") private var fontSize = 13.0
+    @AppStorage("fontName") private var fontName: String = TerminalFont.defaultName
     @AppStorage("themeID") private var themeID = "termuxx"
     @AppStorage("biometricLock") private var biometricLock = false
     @AppStorage("keepAwake") private var keepAwake = true
@@ -14,7 +15,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    TerminalPreview(theme: theme, fontSize: fontSize)
+                    SettingsTerminalPreview(theme: theme, fontSize: fontSize, fontName: fontName)
                         .listRowInsets(EdgeInsets())
                 }
 
@@ -44,10 +45,38 @@ struct SettingsView: View {
                 }
 
                 Section("Шрифт") {
+                    Picker("Семейство", selection: $fontName) {
+                        ForEach(TerminalFont.all, id: \.id) { font in
+                            Text(font.title).tag(font.id)
+                        }
+                    }
                     Stepper(value: $fontSize, in: 8...28, step: 1) {
                         LabeledContent("Размер", value: "\(Int(fontSize)) pt")
                     }
-                    .onChange(of: fontSize) { _, _ in sessions.refreshAppearance() }
+                }
+
+                Section {
+                    NavigationLink {
+                        KeyBarSettingsView()
+                    } label: {
+                        Label("Клавиши над клавиатурой", systemImage: "keyboard")
+                    }
+                } header: {
+                    Text("Ввод")
+                } footer: {
+                    Text("В терминале: два пальца — стрелки, щипок — размер шрифта.")
+                }
+
+                Section {
+                    NavigationLink {
+                        BackupView()
+                    } label: {
+                        Label("Резервная копия", systemImage: "externaldrive")
+                    }
+                } header: {
+                    Text("Данные")
+                } footer: {
+                    Text("Экспорт и импорт серверов, ключей и сниппетов — в том числе для Termuxx на ПК.")
                 }
 
                 Section {
@@ -63,20 +92,25 @@ struct SettingsView: View {
                 } header: {
                     Text("Безопасность и поведение")
                 } footer: {
-                    Text("iOS приостанавливает приложения в фоне, поэтому SSH-сессия может оборваться через ~30 секунд после сворачивания. Вернуться — кнопка «Снова».")
+                    Text("iOS приостанавливает приложения в фоне, поэтому SSH-соединение может оборваться через ~30 секунд после сворачивания. Termuxx переподключится сам, а с tmux вы вернётесь ровно туда, где были.")
                 }
 
                 Section("О приложении") {
-                    LabeledContent("Версия", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
+                    LabeledContent("Версия", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1")
                     Link(destination: URL(string: "https://github.com/stillemptyNOW/termuxx")!) {
                         Label("Исходный код на GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                     }
-                    Text("Сделано на SwiftTerm и Citadel (MIT). Без рекламы, подписок и телеметрии.")
+                    Link(destination: URL(string: "https://github.com/stillemptyNOW/termuxx/tree/main/linux")!) {
+                        Label("Termuxx для ПК (Arch Linux)", systemImage: "desktopcomputer")
+                    }
+                    Text("Сделано на SwiftTerm и Citadel (MIT), шрифты JetBrains Mono и IBM Plex Mono (OFL). Без рекламы, подписок и телеметрии.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Настройки")
+            .onChange(of: fontName) { _, _ in sessions.refreshAppearance() }
+            .onChange(of: fontSize) { _, _ in sessions.refreshAppearance() }
         }
     }
 
@@ -89,35 +123,42 @@ struct SettingsView: View {
     }
 }
 
-struct TerminalPreview: View {
+struct SettingsTerminalPreview: View {
     let theme: TerminalTheme
     let fontSize: Double
+    let fontName: String
+
+    private var font: Font {
+        if fontName == "system" || UIFont(name: fontName, size: CGFloat(fontSize)) == nil {
+            return .system(size: fontSize, design: .monospaced)
+        }
+        return .custom(fontName, size: fontSize)
+    }
 
     var body: some View {
-        let font = Font.system(size: fontSize, design: .monospaced)
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 0) {
-                Text("root@finland").foregroundStyle(Color(hex: theme.ansi[2]))
-                Text(":").foregroundStyle(Color(hex: theme.foreground))
-                Text("~").foregroundStyle(Color(hex: theme.ansi[4]))
-                Text("# systemctl status mtproxy").foregroundStyle(Color(hex: theme.foreground))
+                Text(verbatim: "root@finland").foregroundStyle(Color(hex: theme.ansi[2]))
+                Text(verbatim: ":").foregroundStyle(Color(hex: theme.foreground))
+                Text(verbatim: "~").foregroundStyle(Color(hex: theme.ansi[4]))
+                Text(verbatim: "# systemctl status mtproxy").foregroundStyle(Color(hex: theme.foreground))
             }
             HStack(spacing: 0) {
-                Text("● ").foregroundStyle(Color(hex: theme.ansi[10]))
-                Text("mtproxy.service - MTProto proxy").foregroundStyle(Color(hex: theme.foreground))
+                Text(verbatim: "● ").foregroundStyle(Color(hex: theme.ansi[10]))
+                Text(verbatim: "mtproxy.service - MTProto proxy").foregroundStyle(Color(hex: theme.foreground))
             }
             HStack(spacing: 0) {
-                Text("   Active: ").foregroundStyle(Color(hex: theme.foreground))
-                Text("active (running)").foregroundStyle(Color(hex: theme.ansi[10]))
+                Text(verbatim: "   Active: ").foregroundStyle(Color(hex: theme.foreground))
+                Text(verbatim: "active (running)").foregroundStyle(Color(hex: theme.ansi[10]))
             }
             HStack(spacing: 0) {
-                Text("   Warn: ").foregroundStyle(Color(hex: theme.foreground))
-                Text("1 failed").foregroundStyle(Color(hex: theme.ansi[1]))
-                Text(" · ").foregroundStyle(Color(hex: theme.foreground))
-                Text("load 0.12").foregroundStyle(Color(hex: theme.ansi[3]))
+                Text(verbatim: "   Warn: ").foregroundStyle(Color(hex: theme.foreground))
+                Text(verbatim: "1 failed").foregroundStyle(Color(hex: theme.ansi[1]))
+                Text(verbatim: " · ").foregroundStyle(Color(hex: theme.foreground))
+                Text(verbatim: "load 0.12").foregroundStyle(Color(hex: theme.ansi[3]))
             }
             HStack(spacing: 0) {
-                Text("root@finland:~# ").foregroundStyle(Color(hex: theme.foreground))
+                Text(verbatim: "root@finland:~# ").foregroundStyle(Color(hex: theme.foreground))
                 Rectangle().fill(Color(hex: theme.cursor)).frame(width: fontSize * 0.6, height: fontSize * 1.2)
             }
         }

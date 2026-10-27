@@ -245,7 +245,9 @@ final class SOCKS5Handshake: ChannelDuplexHandler, @unchecked Sendable {
     }
 }
 
-/// Склеивает два канала: всё, что пришло в один, пишется в другой (для проброса портов).
+/// Склеивает два канала (для проброса портов): всё, что пришло в один, пишется в другой.
+/// ВАЖНО: оба канала должны жить на одном event loop — TunnelManager это гарантирует.
+/// Данные, пришедшие до того, как вторая сторона стала активной, буферизуются.
 final class GlueHandler: ChannelDuplexHandler, @unchecked Sendable {
     typealias InboundIn = ByteBuffer
     typealias OutboundIn = ByteBuffer
@@ -254,7 +256,10 @@ final class GlueHandler: ChannelDuplexHandler, @unchecked Sendable {
     private var partner: GlueHandler?
     private var context: ChannelHandlerContext?
     private var pendingRead = false
-    private var pending: [ByteBuffer] = []
+    private var pendingWrites: [ByteBuffer] = []
+    private var pendingEOF = false
+    private var pendingClose = false
+    private var closing = false
 
     static func matchedPair() -> (GlueHandler, GlueHandler) {
         let a = GlueHandler(), b = GlueHandler()
@@ -263,43 +268,99 @@ final class GlueHandler: ChannelDuplexHandler, @unchecked Sendable {
         return (a, b)
     }
 
-    private func partnerWrite(_ data: ByteBuffer) {
-        guard let context else {
-            pending.append(data)
-            return
-        }
-        context.write(wrapOutboundOut(data), promise: nil)
+    /// Разрывает связь, если вторая сторона так и не появилась (иначе пара удерживает друг друга).
+    func unlink() {
+        partner?.partner = nil
+        partner = nil
     }
 
-    private func partnerFlush() { context?.flush() }
+    // MARK: Вызовы от партнёра
+
+    private func partnerWrite(_ data: ByteBuffer) {
+        if let context, context.channel.isActive, !closing {
+            context.write(wrapOutboundOut(data), promise: nil)
+        } else {
+            pendingWrites.append(data)
+        }
+    }
+
+    private func partnerFlush() {
+        if let context, context.channel.isActive { context.flush() }
+    }
 
     private func partnerWriteEOF() {
-        context?.close(mode: .output, promise: nil)
+        guard let context, context.channel.isActive else {
+            pendingEOF = true
+            return
+        }
+        afterPendingWrites(context) { context.close(mode: .output, promise: nil) }
     }
 
-    private func partnerCloseFull() { context?.close(promise: nil) }
+    private func partnerCloseFull() {
+        guard let context, context.channel.isActive else {
+            pendingClose = true
+            return
+        }
+        closeGracefully(context)
+    }
 
     private func partnerBecameWritable() {
-        if pendingRead {
+        if pendingRead, let context {
             pendingRead = false
-            context?.read()
+            context.read()
         }
     }
 
-    private var partnerWritable: Bool { context?.channel.isWritable ?? false }
+    // MARK: Вспомогательное
+
+    /// Выполняет действие после того, как все ранее записанные данные ушли в сеть.
+    private func afterPendingWrites(_ context: ChannelHandlerContext, _ action: @escaping () -> Void) {
+        let promise = context.eventLoop.makePromise(of: Void.self)
+        context.writeAndFlush(wrapOutboundOut(context.channel.allocator.buffer(capacity: 0)), promise: promise)
+        promise.futureResult.whenComplete { _ in action() }
+    }
+
+    private func closeGracefully(_ context: ChannelHandlerContext) {
+        guard !closing else { return }
+        closing = true
+        afterPendingWrites(context) { context.close(promise: nil) }
+        // Если собеседник перестал читать — всё равно закрываемся через 10 секунд.
+        context.eventLoop.scheduleTask(in: .seconds(10)) { context.close(promise: nil) }
+    }
+
+    private func drainPending(_ context: ChannelHandlerContext) {
+        guard context.channel.isActive else { return }
+        if !pendingWrites.isEmpty {
+            let writes = pendingWrites
+            pendingWrites.removeAll()
+            for data in writes { context.write(wrapOutboundOut(data), promise: nil) }
+            context.flush()
+        }
+        if pendingClose {
+            pendingClose = false
+            closeGracefully(context)
+        } else if pendingEOF {
+            pendingEOF = false
+            afterPendingWrites(context) { context.close(mode: .output, promise: nil) }
+        }
+        partner?.partnerBecameWritable()
+    }
+
+    // MARK: ChannelHandler
 
     func handlerAdded(context: ChannelHandlerContext) {
         self.context = context
-        if !pending.isEmpty {
-            for data in pending { context.write(wrapOutboundOut(data), promise: nil) }
-            pending.removeAll()
-            context.flush()
-        }
+        drainPending(context)
     }
 
     func handlerRemoved(context: ChannelHandlerContext) {
         self.context = nil
         partner = nil
+    }
+
+    func channelActive(context: ChannelHandlerContext) {
+        drainPending(context)
+        context.fireChannelActive()
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -312,6 +373,7 @@ final class GlueHandler: ChannelDuplexHandler, @unchecked Sendable {
 
     func channelInactive(context: ChannelHandlerContext) {
         partner?.partnerCloseFull()
+        context.fireChannelInactive()
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
@@ -330,15 +392,17 @@ final class GlueHandler: ChannelDuplexHandler, @unchecked Sendable {
         if context.channel.isWritable {
             partner?.partnerBecameWritable()
         }
+        context.fireChannelWritabilityChanged()
     }
 
     func read(context: ChannelHandlerContext) {
-        if let partner, partner.partnerWritable {
-            context.read()
-        } else if partner?.context == nil {
-            context.read()
-        } else {
+        // Не читаем, пока партнёр активен, но не успевает отправлять (обратное давление).
+        if let partnerContext = partner?.context,
+           partnerContext.channel.isActive,
+           !partnerContext.channel.isWritable {
             pendingRead = true
+            return
         }
+        context.read()
     }
 }
