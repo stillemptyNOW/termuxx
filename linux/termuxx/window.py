@@ -18,7 +18,7 @@ from termuxx import APP_NAME, sshcmd  # noqa: E402
 from termuxx.dialogs import ServerEditor, ask_password, confirm, quick_connect, show_error  # noqa: E402
 from termuxx.settings import Settings  # noqa: E402
 from termuxx.store import HOST_COLORS, KeyItem, Server, Store  # noqa: E402
-from termuxx.terminal import TerminalPage  # noqa: E402
+from termuxx.terminal import TerminalPage, spawn_in  # noqa: E402
 
 
 def _color_index(hex_color: str) -> int:
@@ -590,8 +590,7 @@ class MainWindow(Adw.ApplicationWindow):
         pane.terminal.disconnect_by_func(pane._on_child_exited)
         pane.terminal.connect("child-exited", exited)
         envv = ["TERM=xterm-256color"] + [f"{k}={v}" for k, v in env.items()]
-        pane.terminal.spawn_async(Vte_PtyFlags_DEFAULT(), os.path.expanduser("~"), argv, envv,
-                                  GLib.SpawnFlags.SEARCH_PATH, None, -1, None, None, None)
+        spawn_in(pane.terminal, os.path.expanduser("~"), argv, envv, None)
         self._update_state()
 
     def _close_page_widget(self, page: TerminalPage) -> None:
@@ -888,8 +887,3 @@ def GObject_binding_flags():
 
     return GObject.BindingFlags.BIDIRECTIONAL | GObject.BindingFlags.SYNC_CREATE
 
-
-def Vte_PtyFlags_DEFAULT():
-    from gi.repository import Vte
-
-    return Vte.PtyFlags.DEFAULT

@@ -104,6 +104,11 @@ SHORTCUT_HELP = [
 ]
 
 
+def _opt(options, name: str):
+    value = options.lookup_value(name, None)
+    return value.unpack() if value is not None else None
+
+
 class TermuxxApplication(Adw.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID,
@@ -122,11 +127,10 @@ class TermuxxApplication(Adw.Application):
     # --- запуск ---------------------------------------------------------------------------
 
     def do_handle_local_options(self, options):
-        d = options.end().unpack()
-        if d.get("version"):
+        if _opt(options, "version"):
             print(f"{APP_NAME} {VERSION}")
             return 0
-        if d.get("smoke-test"):
+        if _opt(options, "smoke-test"):
             self.smoke_test = True
             self.set_flags(self.get_flags() | Gio.ApplicationFlags.NON_UNIQUE)
         return -1
@@ -150,15 +154,15 @@ class TermuxxApplication(Adw.Application):
                 self.set_accels_for_action(f"app.{name}", accels)
 
     def do_command_line(self, command_line):
-        options = command_line.get_options_dict().end().unpack()
+        options = command_line.get_options_dict()
         args = command_line.get_arguments()[1:]
-        if options.get("new-window") and self.get_active_window() is not None:
+        if _opt(options, "new-window") and self.get_active_window() is not None:
             from termuxx.window import MainWindow
 
             window = MainWindow(self, open_local=True)
         else:
             window = self._window()
-        target = options.get("ssh")
+        target = _opt(options, "ssh")
         if target:
             self._open_ssh_uri(window, target)
         for arg in args:

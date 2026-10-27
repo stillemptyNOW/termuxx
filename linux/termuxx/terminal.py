@@ -32,6 +32,15 @@ CURSOR_SHAPES = {
 }
 
 
+def spawn_in(terminal: Vte.Terminal, cwd: str, argv: list, env: list, callback=None) -> None:
+    """Vte.Terminal.spawn_async с учётом разных версий PyGObject (child_setup_data есть не везде)."""
+    flags = GLib.SpawnFlags.SEARCH_PATH
+    try:
+        terminal.spawn_async(Vte.PtyFlags.DEFAULT, cwd, argv, env, flags, None, None, -1, None, callback, None)
+    except TypeError:
+        terminal.spawn_async(Vte.PtyFlags.DEFAULT, cwd, argv, env, flags, None, -1, None, callback, None)
+
+
 def user_shell() -> str:
     try:
         shell = Vte.get_user_shell()
@@ -219,10 +228,7 @@ class TerminalPane(Gtk.Box):
         self.spawned_at = time.monotonic()
         self.emit("state-changed")
         try:
-            self.terminal.spawn_async(
-                Vte.PtyFlags.DEFAULT, cwd, argv, env, GLib.SpawnFlags.SEARCH_PATH,
-                None, -1, None, self._on_spawned, None,
-            )
+            spawn_in(self.terminal, cwd, argv, env, self._on_spawned)
         except Exception as e:  # некорректный argv и т.п.
             self._spawn_failed(str(e))
 
