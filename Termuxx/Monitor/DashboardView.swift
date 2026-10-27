@@ -7,11 +7,11 @@ struct DashboardView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var serviceFilter: ServiceFilter = .running
+    @State private var serviceFilter: MonitorServiceFilter = .running
     @State private var serviceSearch = ""
     @State private var showAllServices = false
-    @State private var logSheet: LogSheet?
-    @State private var confirm: PendingAction?
+    @State private var logSheet: MonitorLogSheet?
+    @State private var confirm: MonitorPendingAction?
 
     init(server: Server, password: String?) {
         _monitor = StateObject(wrappedValue: ServerMonitor(server: server, password: password))
@@ -78,7 +78,7 @@ struct DashboardView: View {
         }
         .sheet(item: $logSheet) { sheet in
             NavigationStack {
-                LogTextView(sheet: sheet, monitor: monitor)
+                MonitorLogView(sheet: sheet, monitor: monitor)
             }
         }
         .confirmationDialog(
@@ -192,7 +192,7 @@ struct DashboardView: View {
 
     private func cpuCard(_ snap: MonitorSnapshot) -> some View {
         let value = snap.cpuPercent ?? 0
-        let tint = Level.color(value / 100)
+        let tint = UsageLevel.color(value / 100)
         return MetricCard(title: "Процессор", icon: "cpu", tint: tint) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(snap.cpuPercent.map { "\(Int($0.rounded()))" } ?? "—")
@@ -219,7 +219,7 @@ struct DashboardView: View {
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                 .interpolationMethod(.catmullRom)
             }
-            .chartYScale(domain: 0...100)
+            .chartYScale(domain: 0.0...100.0)
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
             .frame(height: 46)
@@ -230,7 +230,7 @@ struct DashboardView: View {
     }
 
     private func memoryCard(_ snap: MonitorSnapshot) -> some View {
-        let tint = Level.color(snap.memFraction)
+        let tint = UsageLevel.color(snap.memFraction)
         return MetricCard(title: "Память", icon: "memorychip", tint: tint) {
             HStack(spacing: 14) {
                 Gauge(value: snap.memFraction) {
@@ -261,7 +261,7 @@ struct DashboardView: View {
                     }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    UsageBar(fraction: snap.swapFraction, tint: Level.color(snap.swapFraction))
+                    UsageBar(fraction: snap.swapFraction, tint: UsageLevel.color(snap.swapFraction))
                 }
             } else {
                 Text("Swap выключен")
@@ -336,10 +336,10 @@ struct DashboardView: View {
                                 .foregroundStyle(.secondary)
                             Text(MonitorFormat.percent(disk.fraction))
                                 .font(.caption.weight(.bold).monospacedDigit())
-                                .foregroundStyle(Level.color(disk.fraction))
+                                .foregroundStyle(UsageLevel.color(disk.fraction))
                                 .frame(minWidth: 38, alignment: .trailing)
                         }
-                        UsageBar(fraction: disk.fraction, tint: Level.color(disk.fraction))
+                        UsageBar(fraction: disk.fraction, tint: UsageLevel.color(disk.fraction))
                         Text(disk.filesystem)
                             .font(.caption2.monospaced())
                             .foregroundStyle(.tertiary)
@@ -374,7 +374,7 @@ struct DashboardView: View {
                         }
                         Spacer(minLength: 4)
                         Text(String(format: "%.1f%%", process.cpu))
-                            .foregroundStyle(Level.color(min(process.cpu / 100, 1)))
+                            .foregroundStyle(UsageLevel.color(min(process.cpu / 100, 1)))
                             .frame(width: 52, alignment: .trailing)
                         Text(String(format: "%.1f%%", process.mem))
                             .foregroundStyle(.secondary)
@@ -408,7 +408,7 @@ struct DashboardView: View {
         }
     }
 
-    private func count(_ filter: ServiceFilter) -> Int {
+    private func count(_ filter: MonitorServiceFilter) -> Int {
         switch filter {
         case .failed: return monitor.services.filter(\.isFailed).count
         case .running: return monitor.services.filter(\.isRunning).count
@@ -432,7 +432,7 @@ struct DashboardView: View {
             } else {
                 VStack(spacing: 10) {
                     Picker("Фильтр", selection: $serviceFilter) {
-                        ForEach(ServiceFilter.allCases) { filter in
+                        ForEach(MonitorServiceFilter.allCases) { filter in
                             Text("\(filter.title) \(count(filter))").tag(filter)
                         }
                     }
@@ -472,7 +472,7 @@ struct DashboardView: View {
                                 ServiceRow(service: service) { action in
                                     handle(action, service: service)
                                 } onLogs: {
-                                    logSheet = LogSheet(target: .service(service))
+                                    logSheet = MonitorLogSheet(target: .service(service))
                                 }
                                 if service.id != visible.last?.id {
                                     Divider().opacity(0.4)
@@ -503,7 +503,7 @@ struct DashboardView: View {
                     ContainerRow(container: container) { action in
                         handle(action, container: container)
                     } onLogs: {
-                        logSheet = LogSheet(target: .container(container))
+                        logSheet = MonitorLogSheet(target: .container(container))
                     }
                     if container.id != monitor.containers.last?.id {
                         Divider().opacity(0.4)
@@ -529,7 +529,7 @@ struct DashboardView: View {
 
     private func handle(_ action: ServiceAction, service: ServiceInfo) {
         if action.isDestructive {
-            confirm = PendingAction(action: action, target: .service(service))
+            confirm = MonitorPendingAction(action: action, target: .service(service))
         } else {
             Task { await monitor.perform(action, service: service) }
         }
@@ -537,13 +537,13 @@ struct DashboardView: View {
 
     private func handle(_ action: ServiceAction, container: ContainerInfo) {
         if action.isDestructive {
-            confirm = PendingAction(action: action, target: .container(container))
+            confirm = MonitorPendingAction(action: action, target: .container(container))
         } else {
             Task { await monitor.perform(action, container: container) }
         }
     }
 
-    private func run(_ item: PendingAction) async {
+    private func run(_ item: MonitorPendingAction) async {
         switch item.target {
         case .service(let service):
             await monitor.perform(item.action, service: service)
@@ -562,7 +562,7 @@ struct DashboardView: View {
 
 // MARK: - Вспомогательные типы
 
-enum ServiceFilter: String, CaseIterable, Identifiable {
+enum MonitorServiceFilter: String, CaseIterable, Identifiable {
     case failed, running, all
 
     var id: String { rawValue }
@@ -588,7 +588,7 @@ enum MonitorTarget {
     }
 }
 
-struct PendingAction: Identifiable {
+struct MonitorPendingAction: Identifiable {
     let id = UUID()
     let action: ServiceAction
     let target: MonitorTarget
@@ -611,7 +611,7 @@ struct PendingAction: Identifiable {
     }
 }
 
-struct LogSheet: Identifiable {
+struct MonitorLogSheet: Identifiable {
     let id = UUID()
     let target: MonitorTarget
 
@@ -619,7 +619,7 @@ struct LogSheet: Identifiable {
 }
 
 /// Цвет по уровню заполнения: зелёный → оранжевый → красный.
-enum Level {
+enum UsageLevel {
     static func color(_ fraction: Double) -> Color {
         switch fraction {
         case ..<0.6: return Color(hex: "#3DDC97")
@@ -862,8 +862,8 @@ private struct ContainerRow: View {
 }
 
 /// Просмотр логов сервиса или контейнера.
-struct LogTextView: View {
-    let sheet: LogSheet
+struct MonitorLogView: View {
+    let sheet: MonitorLogSheet
     @ObservedObject var monitor: ServerMonitor
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""

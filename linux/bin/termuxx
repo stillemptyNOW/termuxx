@@ -1,0 +1,5 @@
+#!/bin/sh
+# Termuxx — терминал с вкладками и менеджер SSH-серверов.
+TERMUXX_HOME="${TERMUXX_HOME:-/usr/share/termuxx}"
+export PYTHONPATH="$TERMUXX_HOME${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m termuxx "$@"

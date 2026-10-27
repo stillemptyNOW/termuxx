@@ -166,12 +166,12 @@ final class TunnelManager: ObservableObject {
     }
 
     func stopAll(sessionID: UUID) {
-        let ids = active.filter { $0.sessionID == sessionID }.map(\.forward.id)
-        ids.forEach(stop)
+        let ids = active.filter { $0.sessionID == sessionID }.map { $0.forward.id }
+        for id in ids { stop(id) }
     }
 
     func stopEverything() {
-        Array(listeners.keys).forEach(stop)
+        for id in Array(listeners.keys) { stop(id) }
     }
 
     /// Слушающий сокет закрылся сам (например, оборвалось SSH-соединение).

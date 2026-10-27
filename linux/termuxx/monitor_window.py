@@ -233,10 +233,10 @@ def parse_services(text: str) -> tuple[Optional[list[Service]], list[Container]]
         services = None
     else:
         for line in s.get("SVC", []):
-            parts = line.split(None, 4)
+            parts = line.strip().lstrip("●*").split(None, 4)
             if len(parts) < 4:
                 continue
-            unit = parts[0].lstrip("●* ")
+            unit = parts[0]
             if not unit.endswith(".service"):
                 continue
             services.append(Service(unit, parts[1], parts[2], parts[3], parts[4] if len(parts) > 4 else ""))

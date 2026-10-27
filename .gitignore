@@ -5,3 +5,9 @@ Payload/
 *.ipa
 .DS_Store
 Termuxx/Info.plist
+__pycache__/
+*.pyc
+linux/packaging/src/
+linux/packaging/pkg/
+linux/packaging/termuxx/
+linux/packaging/*.pkg.tar.zst

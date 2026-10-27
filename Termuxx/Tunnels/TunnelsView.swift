@@ -37,21 +37,19 @@ struct TunnelsView: View {
                     if forwards.isEmpty {
                         emptyState
                     } else {
-                        GlassGroup(spacing: 14) {
-                            VStack(spacing: 12) {
-                                ForEach(forwards) { forward in
-                                    TunnelCard(
-                                        forward: forward,
-                                        isActive: manager.isActive(forward.id),
-                                        isStarting: manager.isStarting(forward.id),
-                                        copied: copiedID == forward.id,
-                                        onToggle: { toggle(forward, on: $0) },
-                                        onOpen: { open(forward) },
-                                        onCopy: { copy(forward) },
-                                        onEdit: { editing = forward },
-                                        onDelete: { delete(forward) }
-                                    )
-                                }
+                        VStack(spacing: 12) {
+                            ForEach(forwards) { forward in
+                                TunnelCard(
+                                    forward: forward,
+                                    isActive: manager.isActive(forward.id),
+                                    isStarting: manager.isStarting(forward.id),
+                                    copied: copiedID == forward.id,
+                                    onToggle: { toggle(forward, on: $0) },
+                                    onOpen: { open(forward) },
+                                    onCopy: { copy(forward) },
+                                    onEdit: { editing = forward },
+                                    onDelete: { delete(forward) }
+                                )
                             }
                         }
                     }
@@ -79,7 +77,7 @@ struct TunnelsView: View {
         }
         .sheet(item: $editing) { forward in
             NavigationStack {
-                PortForwardEditor(forward: forward, isNew: !forwards.contains { $0.id == forward.id }) { saved in
+                PortForwardEditor(forward: forward, isNew: !forwards.contains(where: { $0.id == forward.id })) { saved in
                     save(saved)
                 } onDelete: {
                     delete(forward)

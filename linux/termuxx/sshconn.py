@@ -177,7 +177,8 @@ def load_private_key(pem: str, passphrase: Optional[str] = None) -> paramiko.PKe
             needs_password = True
             last_error = e
         except (paramiko.SSHException, ValueError, TypeError, IndexError, AssertionError) as e:
-            if "password" in str(e).lower() or "decrypt" in str(e).lower():
+            msg = str(e).lower()
+            if any(w in msg for w in ("password", "decrypt", "checkint", "passphrase")):
                 needs_password = needs_password or bool(password)
             last_error = e
     if needs_password and not password:
