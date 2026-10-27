@@ -1,0 +1,196 @@
+/* Termuxx for Windows — дизайн-токены и базовые компоненты.
+   Стиль: Windows 11 (Mica/Acrylic) + «жидкое стекло» как в iOS-версии. */
+
+
+:root {
+  --accent: #3DDC97;
+  --accent-strong: #2BC584;
+  --accent-soft: rgba(61, 220, 151, 0.16);
+  --danger: #FF5C6C;
+  --warning: #FFB454;
+  --info: #4EA8FF;
+
+  --bg: #0A0E14;                       /* за пределами Mica */
+  --bg-window: rgba(14, 18, 26, 0.72); /* поверх Mica/Acrylic */
+  --bg-sidebar: rgba(255, 255, 255, 0.035);
+  --bg-elevated: rgba(28, 33, 44, 0.86);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.10);
+  --glass: rgba(255, 255, 255, 0.07);
+  --glass-strong: rgba(255, 255, 255, 0.12);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.22);
+
+  --text: #E8EDF3;
+  --text-secondary: #A3ADBB;
+  --text-tertiary: #6B7686;
+  --border: rgba(255, 255, 255, 0.08);
+
+  --radius-s: 6px;
+  --radius: 10px;
+  --radius-l: 14px;
+  --radius-xl: 20px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.25);
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  --titlebar-h: 40px;
+  --statusbar-h: 26px;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;           /* Mica просвечивает */
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+body.no-material { background: var(--bg); }
+input, textarea, select, button { font: inherit; color: inherit; }
+::selection { background: var(--accent-soft); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.24); }
+::-webkit-scrollbar-track { background: transparent; }
+
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--text-secondary); }
+.faint { color: var(--text-tertiary); }
+.row { display: flex; align-items: center; gap: 8px; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.grow { flex: 1; min-width: 0; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drag { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+
+/* ---------- стекло ---------- */
+.glass {
+  background: linear-gradient(180deg, var(--glass-strong), var(--glass));
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow);
+  backdrop-filter: blur(24px) saturate(160%);
+  border-radius: var(--radius-l);
+}
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  padding: 14px;
+}
+
+/* ---------- кнопки ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 14px; border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+  cursor: pointer; white-space: nowrap;
+  transition: background .12s, border-color .12s, transform .06s;
+}
+.btn:hover { background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08)); }
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: .45; cursor: default; transform: none; }
+.btn.primary { background: linear-gradient(180deg, #4BE6A3, var(--accent-strong)); color: #062016; border-color: transparent; font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.danger { color: var(--danger); }
+.btn.danger.solid { background: var(--danger); color: #fff; border-color: transparent; }
+.btn.ghost { background: transparent; border-color: transparent; box-shadow: none; }
+.btn.ghost:hover { background: var(--bg-hover); }
+.btn.small { height: 26px; padding: 0 10px; font-size: 12px; border-radius: var(--radius-s); }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: var(--radius-s);
+  border: none; background: transparent; cursor: pointer; color: var(--text-secondary);
+}
+.icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+.icon-btn.active { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- поля ---------- */
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > label { font-size: 12px; color: var(--text-secondary); }
+.field .hint { font-size: 11px; color: var(--text-tertiary); }
+.input, .select, .textarea {
+  width: 100%; height: 32px; padding: 0 10px; border-radius: var(--radius-s);
+  border: 1px solid var(--border); background: rgba(0, 0, 0, 0.28);
+  outline: none; user-select: text;
+}
+.textarea { height: auto; min-height: 90px; padding: 8px 10px; resize: vertical; font-family: var(--font-mono); font-size: 12px; }
+.input:focus, .select:focus, .textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.select option { background: #1A1F29; }
+
+.toggle { position: relative; width: 38px; height: 22px; flex: none; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .knob { position: absolute; inset: 0; border-radius: 22px; background: rgba(255,255,255,0.16); transition: background .15s; cursor: pointer; }
+.toggle .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.toggle input:checked + .knob { background: var(--accent); }
+.toggle input:checked + .knob::after { transform: translateX(16px); }
+
+.segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--radius); background: rgba(0,0,0,0.25); border: 1px solid var(--border); }
+.segmented button { border: none; background: transparent; padding: 4px 12px; border-radius: 7px; cursor: pointer; color: var(--text-secondary); }
+.segmented button.on { background: var(--glass-strong); color: var(--text); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12); }
+
+/* ---------- диалоги ---------- */
+.dialog-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  animation: fade-in .12s ease-out;
+}
+.dialog {
+  width: min(560px, calc(100vw - 48px)); max-height: calc(100vh - 80px);
+  display: flex; flex-direction: column;
+  background: rgba(24, 29, 39, 0.94);
+  border: 1px solid var(--glass-border); border-radius: var(--radius-xl);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 30px 80px rgba(0,0,0,0.55);
+  animation: pop-in .16s cubic-bezier(.2,.9,.3,1.2);
+}
+.dialog.wide { width: min(860px, calc(100vw - 48px)); }
+.dialog.full { width: calc(100vw - 48px); height: calc(100vh - 48px); max-height: none; }
+.dialog-header { display: flex; align-items: center; gap: 10px; padding: 16px 18px 10px; }
+.dialog-header h2 { margin: 0; font-size: 17px; font-weight: 600; flex: 1; }
+.dialog-body { padding: 6px 18px 14px; overflow: auto; flex: 1; user-select: text; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid var(--border); }
+
+/* ---------- списки, меню, тосты ---------- */
+.list-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-s); cursor: default; }
+.list-row:hover { background: var(--bg-hover); }
+.list-row.selected { background: var(--accent-soft); }
+.section-title { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-tertiary); padding: 10px 10px 4px; }
+.badge { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px; font-size: 11px; background: var(--glass-strong); color: var(--text-secondary); }
+.badge.accent { background: var(--accent-soft); color: var(--accent); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot.ok { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.dot.warn { background: var(--warning); }
+.dot.err { background: var(--danger); }
+.dot.off { background: var(--text-tertiary); }
+
+.menu {
+  position: fixed; z-index: 200; min-width: 200px; padding: 5px;
+  background: rgba(30, 35, 46, 0.97); border: 1px solid var(--glass-border); border-radius: var(--radius);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.5); animation: pop-in .1s ease-out;
+}
+.menu-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
+.menu-item:hover { background: var(--bg-active); }
+.menu-item.danger { color: var(--danger); }
+.menu-item .shortcut { margin-left: auto; color: var(--text-tertiary); font-size: 11px; }
+.menu-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+
+.toasts { position: fixed; right: 16px; bottom: calc(var(--statusbar-h) + 12px); z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+.toast { max-width: 380px; padding: 10px 14px; border-radius: var(--radius); animation: slide-in .18s ease-out; }
+.toast.error { border-color: rgba(255, 92, 108, 0.5); }
+
+.spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.15); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.progress { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
+.progress > div { height: 100%; background: linear-gradient(90deg, var(--accent-strong), #7AF0BC); border-radius: 3px; transition: width .2s; }
+
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 40px; text-align: center; color: var(--text-secondary); }
+.empty .title { font-size: 16px; font-weight: 600; color: var(--text); }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes slide-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
