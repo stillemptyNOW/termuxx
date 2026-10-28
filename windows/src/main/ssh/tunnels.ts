@@ -156,7 +156,7 @@ export async function tunnelStart(ctx: MainContext, sessionId: string, forward: 
         if (type === 'local') {
           socket.pause();
           forwardOut(session, socket.remotePort ?? 0, forward.remoteHost.trim(), forward.remotePort)
-            .then((stream) => { socket.resume(); relay(ctx, rt, socket, stream); })
+            .then((stream) => relay(ctx, rt, socket, stream)) // pipe() сам возобновит поток
             .catch((err) => {
               rt.state.error = friendlyMessage(err);
               emitTunnels(ctx);
@@ -187,10 +187,9 @@ export async function tunnelStart(ctx: MainContext, sessionId: string, forward: 
     emitTunnels(ctx, true);
   } catch (err) {
     stopRuntime(rt);
-    rt.state.status = 'error';
-    rt.state.error = friendlyMessage(err);
+    if (tunnels.get(forward.id) === rt) tunnels.delete(forward.id);
     emitTunnels(ctx, true);
-    throw new UserFacingError(rt.state.error);
+    throw new UserFacingError(friendlyMessage(err));
   }
 }
 

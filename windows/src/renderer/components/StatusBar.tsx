@@ -1,6 +1,6 @@
 import React from 'react';
 import { FolderOpen, Layers, ListPlus, Server as ServerIcon, SquareTerminal, Waypoints } from 'lucide-react';
-import { activeLocation, useApp } from '../state';
+import { useApp } from '../state';
 import { cx, openMenu } from '../ui/kit';
 import { MonitorBar } from '../tools';
 import { sendToPane } from './sessions';
@@ -15,17 +15,17 @@ const STATUS_TEXT: Record<string, string> = {
 };
 
 export function StatusBar() {
-  const loc = useApp((s) => activeLocation(s));
-  const server = useApp((s) => s.server(loc?.pane.serverId));
-  const shell = useApp((s) => s.shells.find((sh) => sh.id === loc?.pane.shellId));
+  // Только стабильные ссылки из состояния: новый объект в селекторе zustand = бесконечный цикл рендера
+  const tab = useApp((s) => s.tabs.find((t) => t.id === s.activeTabId));
+  const pane = tab ? (tab.panes.find((p) => p.id === tab.activePaneId) ?? tab.panes[0]) : undefined;
+  const server = useApp((s) => s.server(pane?.serverId));
+  const shell = useApp((s) => s.shells.find((sh) => sh.id === pane?.shellId));
   const settings = useApp((s) => s.data?.settings);
   const snippets = useApp((s) => s.data?.snippets) ?? [];
   const multiExec = useApp((s) => s.multiExec);
   const toggleSftp = useApp((s) => s.toggleSftp);
   const setDialog = useApp((s) => s.setDialog);
 
-  const tab = loc?.tab;
-  const pane = loc?.pane;
   const connected = pane?.status === 'connected' && !!pane.sessionId;
 
   const snippetMenu = (e: React.MouseEvent) => {

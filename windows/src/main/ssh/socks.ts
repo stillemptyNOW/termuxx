@@ -105,7 +105,16 @@ export function socks5Connect(proxy: Socks5Proxy, targetHost: string, targetPort
           sock.removeListener('data', onData);
           sock.removeAllListeners('close');
           sock.removeAllListeners('error');
+          // ssh2 подписывается на 'data' асинхронно — держим поток на паузе, чтобы не потерять
+          // баннер сервера, и возобновляем, как только появится слушатель.
+          sock.pause();
           if (rest.length) sock.unshift(rest);
+          const onNewListener = (event: string | symbol) => {
+            if (event !== 'data') return;
+            sock.removeListener('newListener', onNewListener);
+            process.nextTick(() => sock.resume());
+          };
+          sock.on('newListener', onNewListener);
           resolve(sock);
           return;
         } else {
@@ -208,7 +217,7 @@ export function handleSocks5Client(
         onConnect(host, port).then((remote) => {
           reply(0x00);
           if (rest.length) remote.write(rest);
-          client.resume();
+          // Не возобновляем поток здесь: pipe() в relay сделает это сам, без потери данных.
           resolve({ host, port, remote });
         }).catch(() => {
           reply(0x05);

@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { basicSetup } from 'codemirror';
 import { EditorView, keymap } from '@codemirror/view';
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state';
 import { StreamLanguage, LanguageSupport } from '@codemirror/language';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { json } from '@codemirror/lang-json';
@@ -164,7 +164,7 @@ export function EditorDialog({ sessionId, path, initialText, onClose, onSaved }:
         extensions: [
           basicSetup,
           oneDark,
-          termuxxTheme,
+          Prec.highest(termuxxTheme),
           languageConf.of(lang ? lang.ext() : []),
           EditorState.tabSize.of(4),
           keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { void saveRef.current(); return true; } }]),

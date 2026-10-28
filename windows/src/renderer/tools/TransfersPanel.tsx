@@ -18,7 +18,15 @@ export function TransfersPanel() {
   const [now, setNow] = useState(Date.now());
 
   const list = useMemo(
-    () => order.map((id) => items[id]).filter((t): t is TransferItem => !!t && !t.dismissed),
+    () => order
+      .map((id) => items[id])
+      .filter((t): t is TransferItem => !!t && !t.dismissed)
+      .sort((a, b) => {
+        const ra = a.state === 'running' ? 0 : 1;
+        const rb = b.state === 'running' ? 0 : 1;
+        if (ra !== rb) return ra - rb;
+        return ra === 0 ? a.startedAt - b.startedAt : b.updatedAt - a.updatedAt;
+      }),
     [order, items],
   );
   const running = list.filter((t) => t.state === 'running');

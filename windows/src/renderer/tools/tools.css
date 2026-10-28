@@ -173,9 +173,11 @@
 .tx-dash-host { display: flex; align-items: center; gap: 10px; }
 .tx-dash-hostname { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
 .tx-dash-sub { color: var(--text-secondary); }
-.tx-dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.tx-dash-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1100px) { .tx-dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .tx-dash-grid { grid-template-columns: minmax(0, 1fr); } }
 .tx-span-2 { grid-column: span 2; }
-@media (max-width: 760px) { .tx-span-2 { grid-column: span 1; } }
+@media (max-width: 720px) { .tx-span-2 { grid-column: span 1; } }
 .tx-card {
   display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; min-width: 0;
   border-radius: var(--radius-l); border: 1px solid var(--glass-border);
@@ -193,6 +195,8 @@
 .tx-disk-pct { width: 40px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tx-mem { display: flex; align-items: center; gap: 16px; }
 .tx-mem-num { font-size: 18px; font-weight: 650; }
+.tx-mem .tx-meter { margin-top: 5px; }
+.tx-card .tx-chart { margin-top: auto; }
 .tx-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
 .tx-table th { text-align: left; font-weight: 500; color: var(--text-tertiary); font-size: 11px; padding: 0 6px 6px; }
 .tx-table td { padding: 5px 6px; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -246,3 +250,8 @@
 .tx-fp.old { opacity: .7; }
 .tx-fp-value { font-size: 13px; margin-top: 3px; word-break: break-all; color: var(--text); user-select: text; }
 .tx-fp .icon-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+
+/* Переключатель без подписи внутри строк (kit .toggle — inline span) */
+.tx-toggle-wrap { display: inline-flex; align-items: center; flex: none; }
+.tx-toggle-wrap label { display: inline-flex; }
+.tx-toggle-wrap .toggle { display: inline-block; }

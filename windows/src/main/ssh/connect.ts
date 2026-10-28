@@ -252,6 +252,8 @@ class AuthFlow {
   private triedKey = false;
   private lastError: string | null = null;
   private kbdAutoUsed = false;
+  /** Последняя попытка была паролем, который сервер даже не проверял (способ не разрешён). */
+  private lastWasPassword = false;
   private readonly username: string;
   private readonly label: string;
 
@@ -336,15 +338,24 @@ class AuthFlow {
           if (this.cancelled) return false;
           if (!key) continue;
           this.triedKey = true;
+          this.lastWasPassword = false;
           return { type: 'publickey', username: this.username, key };
         }
         case 'agent': {
           if (!this.allows(methods, 'publickey')) continue;
+          this.lastWasPassword = false;
           return { type: 'agent', username: this.username, agent: step.path };
         }
         case 'password': {
           if (!this.allows(methods, 'password', 'keyboard-interactive')) continue;
           let password = step.known;
+          // Первую попытку отправили «паролем», а сервер принимает только keyboard-interactive —
+          // пароль не проверялся, повторяем его же через keyboard-interactive без вопроса.
+          if (password === null && step.reason === 'retry' && this.lastWasPassword && this.currentPassword !== null
+              && methods && !methods.includes('password') && methods.includes('keyboard-interactive')) {
+            password = this.currentPassword;
+            this.passwordAttempts--;
+          }
           if (password === null) {
             const title = step.reason === 'retry'
               ? `Неверный пароль. Пароль для ${this.label}`
@@ -366,12 +377,15 @@ class AuthFlow {
             this.steps.unshift({ kind: 'password', known: null, reason: 'retry' });
           }
           if (methods && !methods.includes('password')) {
+            this.lastWasPassword = false;
             return this.keyboardInteractive(password);
           }
+          this.lastWasPassword = true;
           return { type: 'password', username: this.username, password };
         }
         case 'kbd': {
           if (!methods || !methods.includes('keyboard-interactive')) continue;
+          this.lastWasPassword = false;
           return this.keyboardInteractive(this.currentPassword);
         }
       }

@@ -57,8 +57,10 @@ export function TunnelsDialog({ sessionId, server, onClose, onSaveServer }: Tunn
 
   useEffect(() => {
     let alive = true;
-    api().tunnelList().then((list) => { if (alive) setStates(list); }).catch(() => undefined);
-    const off = api().onTunnels((list) => setStates(list));
+    let gotEvent = false;
+    const off = api().onTunnels((list) => { gotEvent = true; setStates(list); });
+    // Начальный список не должен затирать более свежее событие.
+    api().tunnelList().then((list) => { if (alive && !gotEvent) setStates(list); }).catch(() => undefined);
     return () => { alive = false; off(); };
   }, []);
 
@@ -118,6 +120,20 @@ export function TunnelsDialog({ sessionId, server, onClose, onSaveServer }: Tunn
     }
   };
 
+  /** Свободный локальный порт для нового туннеля. */
+  const freePort = (start: number) => {
+    const used = new Set(forwards.filter((x) => typeOf(x) !== 'remote').map((x) => x.localPort));
+    let p = start;
+    while (used.has(p) && p < 65535) p++;
+    return p;
+  };
+
+  const addForward = (preset?: Partial<PortForward>) => {
+    const base: PortForward = { id: newId(), name: '', type: 'local', localPort: 8080, remoteHost: '127.0.0.1', remotePort: 80, autoStart: true, ...preset };
+    if ((base.type ?? 'local') !== 'remote') base.localPort = freePort(base.localPort);
+    setEditing({ forward: base, isNew: true });
+  };
+
   const activeCount = states.filter((s) => s.status === 'active' && forwards.some((f) => f.id === s.id)).length;
 
   return (
@@ -130,7 +146,7 @@ export function TunnelsDialog({ sessionId, server, onClose, onSaveServer }: Tunn
         <span className="faint grow">
           {activeCount > 0 ? `Активно: ${activeCount}` : 'Туннели работают, пока открыта SSH-сессия.'}
         </span>
-        <Button icon={<Plus size={14} />} onClick={() => setEditing({ forward: { id: newId(), name: '', type: 'local', localPort: 8080, remoteHost: '127.0.0.1', remotePort: 80, autoStart: true }, isNew: true })}>
+        <Button icon={<Plus size={14} />} onClick={() => addForward()}>
           Добавить туннель
         </Button>
         <Button variant="primary" onClick={onClose}>Готово</Button>
@@ -151,7 +167,7 @@ export function TunnelsDialog({ sessionId, server, onClose, onSaveServer }: Tunn
               <button
                 key={p.name}
                 className="btn small"
-                onClick={() => setEditing({ forward: { id: newId(), name: p.name, localPort: 8080, remoteHost: '127.0.0.1', remotePort: 80, autoStart: true, ...p.f } as PortForward, isNew: true })}
+                onClick={() => addForward({ name: p.name, ...p.f })}
               >
                 {p.name}
               </button>
@@ -201,7 +217,7 @@ export function TunnelsDialog({ sessionId, server, onClose, onSaveServer }: Tunn
                 )}
                 <IconButton title="Изменить" onClick={() => setEditing({ forward: f, isNew: false })}><Pencil size={14} /></IconButton>
                 <IconButton title="Удалить" onClick={() => setDeleting(f)}><Trash2 size={14} /></IconButton>
-                <span className={cx(pending.has(f.id) && 'tx-pending')}>
+                <span className={cx('tx-toggle-wrap', pending.has(f.id) && 'tx-pending')} title={running ? 'Остановить' : 'Запустить'}>
                   <Toggle checked={running} onChange={(on) => toggle(f, on)} />
                 </span>
               </div>

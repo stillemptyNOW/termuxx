@@ -111,6 +111,7 @@ export function SftpPanel({ sessionId, server, connected, onClose, followDefault
   }, []);
   const showModified = width >= 400;
   const showPerms = width >= 540;
+  const narrow = width < 330;
 
   /** Перейти в папку. Возвращает true при успехе. */
   const load = useCallback(async (target: string, opts?: { keepSelection?: boolean; quiet?: boolean }): Promise<boolean> => {
@@ -169,6 +170,7 @@ export function SftpPanel({ sessionId, server, connected, onClose, followDefault
     if (!follow || !connected || path === null) return;
     let alive = true;
     const tick = async () => {
+      if (document.hidden) return;
       try {
         const cwd = await api().remoteCwd(sessionId);
         if (!alive || !cwd || cwd === lastCwdRef.current) return;
@@ -179,7 +181,7 @@ export function SftpPanel({ sessionId, server, connected, onClose, followDefault
       }
     };
     void tick();
-    const id = window.setInterval(() => void tick(), 2000);
+    const id = window.setInterval(() => void tick(), 3000);
     return () => { alive = false; window.clearInterval(id); };
   }, [follow, connected, sessionId, path === null, load]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -275,20 +277,23 @@ export function SftpPanel({ sessionId, server, connected, onClose, followDefault
   // ---------- выделение ----------
 
   const clickRow = (e: React.MouseEvent, entry: RemoteEntry) => {
+    const additive = e.ctrlKey || e.metaKey;
     if (e.shiftKey && anchor) {
       const a = visible.findIndex((x) => x.path === anchor);
       const b = visible.findIndex((x) => x.path === entry.path);
       if (a >= 0 && b >= 0) {
         const [from, to] = a < b ? [a, b] : [b, a];
         const range = visible.slice(from, to + 1).map((x) => x.path);
-        setSelected(e.ctrlKey || e.metaKey ? new Set([...selected, ...range]) : new Set(range));
+        setSelected((prev) => (additive ? new Set([...prev, ...range]) : new Set(range)));
         return;
       }
     }
-    if (e.ctrlKey || e.metaKey) {
-      const next = new Set(selected);
-      if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path);
-      setSelected(next);
+    if (additive) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path);
+        return next;
+      });
       setAnchor(entry.path);
       return;
     }
@@ -301,7 +306,7 @@ export function SftpPanel({ sessionId, server, connected, onClose, followDefault
     const current = anchor ? visible.findIndex((x) => x.path === anchor) : -1;
     const next = Math.max(0, Math.min(visible.length - 1, current < 0 ? (delta > 0 ? 0 : visible.length - 1) : current + delta));
     const target = visible[next];
-    if (extend) setSelected(new Set([...selected, target.path]));
+    if (extend) setSelected((prev) => new Set([...prev, target.path]));
     else setSelected(new Set([target.path]));
     setAnchor(target.path);
     const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${next}"]`);
@@ -572,9 +577,9 @@ export function SftpPanel({ sessionId, server, connected, onClose, followDefault
         >
           <LocateFixed size={15} />
         </IconButton>
-        <span className="tx-sep" />
-        <IconButton title="Загрузить файлы сюда" onClick={() => void uploadTo(path ?? '/')} disabled={!connected || !path}><Upload size={15} /></IconButton>
-        <IconButton title="Новая папка" onClick={() => setDialog({ kind: 'mkdir', dir: path ?? '/' })} disabled={!connected || !path}><FolderPlus size={15} /></IconButton>
+        {!narrow && <span className="tx-sep" />}
+        {!narrow && <IconButton title="Загрузить файлы сюда" onClick={() => void uploadTo(path ?? '/')} disabled={!connected || !path}><Upload size={15} /></IconButton>}
+        {!narrow && <IconButton title="Новая папка" onClick={() => setDialog({ kind: 'mkdir', dir: path ?? '/' })} disabled={!connected || !path}><FolderPlus size={15} /></IconButton>}
         <IconButton title={showHidden ? 'Скрыть скрытые файлы' : `Показать скрытые файлы${hiddenCount ? ` (${hiddenCount})` : ''}`} active={showHidden} onClick={() => setShowHidden(!showHidden)}>
           {showHidden ? <Eye size={15} /> : <EyeOff size={15} />}
         </IconButton>
