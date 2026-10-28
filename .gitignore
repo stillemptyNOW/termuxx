@@ -14,3 +14,4 @@ linux/packaging/*.pkg.tar.zst
 windows/node_modules/
 windows/dist/
 windows/release/
+windows/.w1test/
