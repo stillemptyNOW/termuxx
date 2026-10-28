@@ -298,6 +298,13 @@ export class SshSession implements SessionHandle {
     this.hooks.onClosed(this);
   }
 
+  /** Служебная строка в терминал (предупреждения туннелей и т.п.). */
+  notice(text: string): void {
+    if (this.finished) return;
+    this.flushOutput();
+    this.emit.data(`\r\n${text}\r\n`);
+  }
+
   // --- SessionHandle ---
 
   write(data: string): void {

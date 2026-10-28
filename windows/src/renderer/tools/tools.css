@@ -1,0 +1,248 @@
+/* Стили инструментов рабочей области (SFTP, редактор, передачи, мониторинг, туннели, запросы).
+   Все классы с префиксом tx-, базовые токены — в ui/styles.css. */
+
+.tx-accent { color: var(--accent); }
+.tx-error-text { color: var(--danger); }
+.tx-rx { color: var(--accent); }
+.tx-tx { color: var(--info); }
+.tx-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 100%; padding: 24px; text-align: center; }
+.tx-sep { width: 1px; height: 18px; background: var(--border); margin: 0 3px; flex: none; }
+.tx-warn-box, .tx-danger-box {
+  padding: 10px 12px; border-radius: var(--radius); font-size: 12.5px; line-height: 1.45;
+  background: rgba(255, 180, 84, 0.10); border: 1px solid rgba(255, 180, 84, 0.35); color: #FFD9A3;
+}
+.tx-danger-box { background: rgba(255, 92, 108, 0.12); border-color: rgba(255, 92, 108, 0.45); color: #FFC2C9; }
+
+/* ======================= SFTP-панель ======================= */
+
+.tx-sftp {
+  position: relative; display: flex; flex-direction: column; height: 100%; min-width: 0;
+  background: var(--bg-sidebar); border-right: 1px solid var(--border);
+}
+.tx-sftp-header { display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 6px; border-bottom: 1px solid var(--border); }
+.tx-sftp-title { display: flex; align-items: center; gap: 8px; padding: 0 4px; font-weight: 600; font-size: 12px; color: var(--text-secondary); min-width: 0; }
+.tx-sftp-title .ellipsis { flex: 1; min-width: 0; }
+.tx-sftp-tools { display: flex; align-items: center; gap: 1px; flex-wrap: wrap; }
+.tx-sftp-tools .icon-btn { width: 28px; height: 28px; }
+.tx-sftp-tools .icon-btn:disabled { opacity: .35; cursor: default; background: transparent; }
+.tx-path-input { height: 28px; font-size: 12px; padding: 0 8px; }
+.tx-filter-input { height: 28px; font-size: 12px; }
+.tx-sftp-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tx-sftp-status {
+  display: flex; justify-content: space-between; gap: 8px; padding: 5px 12px;
+  border-top: 1px solid var(--border); font-size: 11.5px; color: var(--text-secondary);
+}
+
+.tx-cols { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+.tx-col-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.tx-col-size { width: 66px; flex: none; text-align: right; }
+.tx-col-date { width: 108px; flex: none; text-align: right; }
+.tx-col-perm { width: 84px; flex: none; text-align: right; font-size: 11px; }
+.tx-cols-head { height: 28px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-tertiary); }
+.tx-cols-head button {
+  border: none; background: transparent; padding: 0; cursor: pointer; color: inherit;
+  font-size: 11px; font-weight: 600; letter-spacing: .02em; display: inline-flex; gap: 4px; align-items: center;
+}
+.tx-cols-head .tx-col-size, .tx-cols-head .tx-col-date, .tx-cols-head .tx-col-perm { justify-content: flex-end; }
+.tx-cols-head button:hover { color: var(--text); }
+.tx-sort { font-size: 8px; color: var(--accent); }
+
+.tx-list { flex: 1; min-height: 0; overflow: auto; outline: none; padding: 3px 4px 8px; }
+.tx-row {
+  height: 28px; border-radius: 6px; cursor: default; font-size: 12.5px;
+  color: var(--text); white-space: nowrap; border: 1px solid transparent;
+}
+.tx-row .tx-col-size, .tx-row .tx-col-date, .tx-row .tx-col-perm { color: var(--text-tertiary); font-size: 11.5px; }
+.tx-row:hover { background: var(--bg-hover); }
+.tx-row.selected { background: var(--accent-soft); border-color: rgba(61, 220, 151, 0.25); }
+.tx-list:focus .tx-row.selected { background: rgba(61, 220, 151, 0.22); }
+.tx-row.hidden-file .tx-col-name { opacity: .7; }
+.tx-row-up { color: var(--text-secondary); }
+.tx-link-name { font-style: italic; }
+.tx-list-empty { padding: 28px 16px; text-align: center; color: var(--text-secondary); line-height: 1.6; }
+
+.tx-sftp.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.tx-drop-overlay {
+  position: absolute; inset: 8px; z-index: 5; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center;
+  border-radius: var(--radius-l); color: var(--accent);
+  background: rgba(10, 14, 20, 0.78); backdrop-filter: blur(6px);
+}
+
+/* ======================= Права и логи ======================= */
+
+.tx-chmod { width: 100%; border-collapse: collapse; }
+.tx-chmod th { font-weight: 500; font-size: 12px; color: var(--text-secondary); padding: 6px; }
+.tx-chmod td { padding: 6px; text-align: center; border-top: 1px solid var(--border); }
+.tx-chmod td:first-child { text-align: left; }
+.tx-check { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.tx-mode-preview { height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: var(--radius-s); background: rgba(0,0,0,0.28); border: 1px solid var(--border); letter-spacing: .08em; }
+.tx-log {
+  margin: 0; height: min(60vh, 560px); overflow: auto; padding: 12px; border-radius: var(--radius);
+  background: #070A0F; border: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: #C9D3DE; white-space: pre; user-select: text;
+}
+.tx-log.wrap { white-space: pre-wrap; word-break: break-word; }
+
+/* ======================= Редактор ======================= */
+
+.tx-editor { overflow: hidden; }
+.tx-editor .dialog-header { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
+.tx-editor .dialog-header h2 { display: flex; align-items: baseline; gap: 8px; font-size: 15px; min-width: 0; }
+.tx-editor-path { font-size: 11px; font-weight: 400; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; }
+.tx-dirty { color: var(--warning); font-size: 12px; }
+.tx-editor-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: #0B0F16; }
+.tx-editor-host { flex: 1; min-height: 0; }
+.tx-editor-host .cm-editor { height: 100%; }
+.tx-editor-host .cm-editor.cm-focused { outline: none; }
+.tx-editor-status {
+  display: flex; align-items: center; gap: 16px; padding: 6px 14px; font-size: 11.5px; color: var(--text-secondary);
+  border-top: 1px solid var(--border); border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+.tx-confirm-overlay {
+  position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.45); border-radius: var(--radius-xl);
+}
+.tx-confirm { width: 420px; padding: 18px; }
+.tx-confirm-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+
+/* ======================= Графики ======================= */
+
+.tx-chart { width: 100%; display: block; }
+.tx-chart-grid { stroke: rgba(255, 255, 255, 0.06); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 3 4; }
+.tx-ring { position: relative; flex: none; }
+.tx-ring-track { stroke: rgba(255, 255, 255, 0.08); }
+.tx-ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; }
+.tx-ring-pct { font-size: 20px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.tx-meter { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.09); overflow: hidden; }
+.tx-meter.thin { height: 4px; border-radius: 2px; }
+.tx-meter > div { height: 100%; border-radius: inherit; transition: width .4s ease, background .3s; }
+
+/* ======================= Передачи ======================= */
+
+.tx-transfers {
+  position: fixed; z-index: 240;
+  right: var(--tx-transfers-right, 16px);
+  bottom: var(--tx-transfers-bottom, calc(var(--statusbar-h) + 12px));
+  width: 380px; max-height: 60vh; display: flex; flex-direction: column; overflow: hidden;
+  border-radius: var(--radius-l); animation: slide-in .18s ease-out;
+  background: linear-gradient(180deg, rgba(36, 42, 55, 0.92), rgba(24, 29, 39, 0.94));
+}
+.tx-transfers.collapsed { width: 300px; }
+.tx-transfers > .progress { margin: 0 12px 10px; }
+.tx-transfers-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.tx-transfers-head .icon-btn { width: 24px; height: 24px; }
+.tx-transfers-list { overflow: auto; padding: 0 6px 6px; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--border); padding-top: 6px; }
+.tx-transfer { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: var(--radius); }
+.tx-transfer:hover { background: var(--bg-hover); }
+.tx-transfer .progress { margin-top: 6px; height: 4px; }
+.tx-transfer-icon {
+  width: 30px; height: 30px; border-radius: 9px; flex: none; display: flex; align-items: center; justify-content: center;
+  background: rgba(61, 220, 151, 0.14); color: var(--accent);
+}
+.tx-transfer-icon.upload { background: rgba(78, 168, 255, 0.14); color: var(--info); }
+.tx-transfer.error .tx-transfer-icon { background: rgba(255, 92, 108, 0.14); color: var(--danger); }
+.tx-transfer.cancelled .tx-transfer-icon { opacity: .5; }
+.tx-transfer-name { font-size: 12.5px; font-weight: 500; }
+.tx-transfer-detail { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+.tx-transfer-actions { display: flex; flex: none; }
+.tx-transfer-actions .icon-btn { width: 26px; height: 26px; }
+.tx-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.6); animation: tx-pulse 1.4s infinite; flex: none; }
+@keyframes tx-pulse { 0% { box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.55); } 70% { box-shadow: 0 0 0 8px rgba(61, 220, 151, 0); } 100% { box-shadow: 0 0 0 0 rgba(61, 220, 151, 0); } }
+
+/* ======================= Строка мониторинга ======================= */
+
+.tx-monbar {
+  display: inline-flex; align-items: center; gap: 14px; height: 100%; max-width: 100%; min-width: 0;
+  padding: 0 10px; border: none; background: transparent; cursor: pointer; overflow: hidden;
+  font-size: 11.5px; color: var(--text-secondary); border-radius: var(--radius-s); white-space: nowrap;
+}
+.tx-monbar:hover { background: var(--bg-hover); color: var(--text); }
+.tx-monbar.stale { opacity: .6; }
+.tx-monbar .faint { display: inline-flex; align-items: center; gap: 5px; }
+.tx-monbar-item { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+.tx-monbar-val { font-variant-numeric: tabular-nums; color: var(--text); }
+.tx-monbar-meter { width: 38px; display: inline-block; }
+@media (max-width: 1100px) { .tx-monbar-wide { display: none; } }
+@media (max-width: 900px) { .tx-monbar-meter { display: none; } }
+
+/* ======================= Дашборд ======================= */
+
+.tx-dash { display: flex; flex-direction: column; gap: 14px; padding-bottom: 6px; user-select: none; }
+.tx-dash-hero { display: flex; flex-direction: column; gap: 4px; padding: 4px 2px; }
+.tx-dash-host { display: flex; align-items: center; gap: 10px; }
+.tx-dash-hostname { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+.tx-dash-sub { color: var(--text-secondary); }
+.tx-dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.tx-span-2 { grid-column: span 2; }
+@media (max-width: 760px) { .tx-span-2 { grid-column: span 1; } }
+.tx-card {
+  display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; min-width: 0;
+  border-radius: var(--radius-l); border: 1px solid var(--glass-border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.03));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
+}
+.tx-card > header { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--text); flex-wrap: wrap; }
+.tx-card > header .faint { font-weight: 400; }
+.tx-big { font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.tx-card-foot { font-size: 11.5px; color: var(--text-tertiary); }
+.tx-net-rates { display: flex; gap: 18px; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tx-net-rates span { display: inline-flex; align-items: center; gap: 4px; }
+.tx-disks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px 20px; }
+.tx-disk { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.tx-disk-pct { width: 40px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tx-mem { display: flex; align-items: center; gap: 16px; }
+.tx-mem-num { font-size: 18px; font-weight: 650; }
+.tx-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+.tx-table th { text-align: left; font-weight: 500; color: var(--text-tertiary); font-size: 11px; padding: 0 6px 6px; }
+.tx-table td { padding: 5px 6px; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tx-table th:first-child, .tx-table td:first-child { width: 64px; }
+.tx-table .num { text-align: right; width: 58px; font-variant-numeric: tabular-nums; }
+.tx-count { display: inline-flex; margin-left: 6px; min-width: 18px; height: 16px; padding: 0 5px; border-radius: 8px; align-items: center; justify-content: center; font-size: 10.5px; background: rgba(255,255,255,0.10); color: var(--text-secondary); }
+.tx-count.err { background: rgba(255, 92, 108, 0.22); color: #FFB3BB; }
+.tx-search {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: var(--radius-s);
+  background: rgba(0,0,0,0.28); border: 1px solid var(--border); color: var(--text-tertiary); font-weight: 400;
+}
+.tx-search input { border: none; outline: none; background: transparent; width: 150px; font-size: 12.5px; user-select: text; }
+.tx-svc-list { display: flex; flex-direction: column; max-height: 360px; overflow: auto; margin: 0 -6px; }
+.tx-svc { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; min-height: 34px; }
+.tx-svc:hover { background: var(--bg-hover); }
+.tx-svc-name { width: 230px; flex: none; }
+.tx-row-actions { display: inline-flex; align-items: center; gap: 0; flex: none; min-width: 90px; justify-content: flex-end; }
+.tx-row-actions .icon-btn { width: 28px; height: 28px; }
+.tx-dash-foot { text-align: center; font-size: 11.5px; }
+
+/* ======================= Туннели ======================= */
+
+.tx-tunnels-intro { margin: 0 0 12px; line-height: 1.5; font-size: 12.5px; }
+.tx-tunnels-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px; text-align: center; }
+.tx-tunnels { display: flex; flex-direction: column; gap: 8px; }
+.tx-tunnel {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-l);
+  border: 1px solid var(--border); background: rgba(255,255,255,0.03); transition: border-color .2s, background .2s;
+}
+.tx-tunnel.on { border-color: rgba(61, 220, 151, 0.35); background: rgba(61, 220, 151, 0.06); }
+.tx-tunnel.err { border-color: rgba(255, 92, 108, 0.4); }
+.tx-tunnel .icon-btn { width: 28px; height: 28px; }
+.tx-tunnel-type {
+  width: 30px; height: 30px; border-radius: 9px; flex: none; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px; font-family: var(--font-mono);
+  background: rgba(61, 220, 151, 0.14); color: var(--accent);
+}
+.tx-tunnel-type.remote { background: rgba(180, 140, 255, 0.16); color: #CFB3FF; }
+.tx-tunnel-type.dynamic { background: rgba(78, 168, 255, 0.16); color: #85C3FF; }
+.tx-tunnel-title { font-weight: 600; font-size: 13px; }
+.tx-tunnel .mono.faint { font-size: 11.5px; margin-top: 1px; }
+.tx-tunnel-state { font-size: 11.5px; margin-top: 3px; }
+.tx-pending { opacity: .55; pointer-events: none; }
+
+/* ======================= Запросы ======================= */
+
+.tx-fp {
+  position: relative; padding: 10px 40px 10px 12px; border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); font-size: 11.5px;
+}
+.tx-fp.old { opacity: .7; }
+.tx-fp-value { font-size: 13px; margin-top: 3px; word-break: break-all; color: var(--text); user-select: text; }
+.tx-fp .icon-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
