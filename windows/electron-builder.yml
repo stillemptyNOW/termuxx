@@ -1,0 +1,61 @@
+appId: com.stillempty.termuxx
+productName: Termuxx
+copyright: Copyright © 2026 stillemptyNOW
+
+directories:
+  output: release          # dist/ занят сборкой esbuild
+  buildResources: build
+
+files:
+  - dist/**/*
+  - "!dist/**/*.map"
+  - package.json
+
+asar: true
+# Нативные модули (node-pty: conpty.dll, OpenConsole.exe, winpty; ssh2 → cpu-features) должны лежать вне asar.
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+  - "**/node_modules/cpu-features/**"
+  - "**/*.node"
+
+npmRebuild: true
+electronLanguages:
+  - ru
+  - en-US
+
+win:
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Termuxx
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  deleteAppDataOnUninstall: false
+  multiLanguageInstaller: true
+  installerLanguages:
+    - ru_RU
+    - en_US
+  artifactName: "Termuxx-Setup-${version}.${ext}"
+
+portable:
+  artifactName: "Termuxx-Portable-${version}.${ext}"
+
+# Только для локальной проверки конфигурации на Linux (`electron-builder --dir`).
+linux:
+  icon: build/icon.png
+  category: Utility
+  target:
+    - dir
+
+publish: null

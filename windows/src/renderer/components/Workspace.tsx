@@ -32,6 +32,7 @@ export function TabView({ tab, visible }: { tab: Tab; visible: boolean }) {
   const sftpWidth = useApp((s) => s.layout.sftpWidth);
   const setLayout = useApp((s) => s.setLayout);
   const toggleSftp = useApp((s) => s.toggleSftp);
+  const followDefault = useApp((s) => s.data?.settings.sftpFollowsTerminal ?? true);
 
   // SFTP-панель следует за активной (или первой подключённой) SSH-панелью вкладки
   const activePane = tab.panes.find((p) => p.id === tab.activePaneId) ?? tab.panes[0];
@@ -58,6 +59,7 @@ export function TabView({ tab, visible }: { tab: Tab; visible: boolean }) {
               server={server}
               connected={sftpPane?.status === 'connected' && !!sftpPane.sessionId}
               onClose={() => toggleSftp(tab.id)}
+              followDefault={followDefault}
             />
           </div>
           <Resizer onResize={onResize} />
