@@ -1,7 +1,7 @@
 // Мост между renderer и main: window.termuxx (контракт — src/shared/api.ts).
 // Соглашение: методы с Promise → ipcRenderer.invoke (ipcMain.handle), void → ipcRenderer.send (ipcMain.on),
 // clipboardRead → sendSync. Аргументы передаются позиционно, в порядке параметров метода.
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { IPC, type TermuxxAPI, type Unsubscribe } from '../shared/api';
 
 function on<T>(channel: string, cb: (payload: T) => void): Unsubscribe {
@@ -110,6 +110,7 @@ const api: TermuxxAPI = {
   // --- окно и система ---
   openExternal: (url) => send(IPC.openExternal, url),
   showItemInFolder: (path) => send(IPC.showItemInFolder, path),
+  pathsForFiles: (files) => files.map((f) => webUtils.getPathForFile(f)).filter(Boolean),
   clipboardRead: () => {
     try {
       return String(ipcRenderer.sendSync(IPC.clipboardRead) ?? '');

@@ -93,6 +93,8 @@ export interface TermuxxAPI {
   // --- окно и система ---
   openExternal(url: string): void;
   showItemInFolder(path: string): void;
+  /** Пути файлов из drag-and-drop (в sandbox-режиме File.path недоступен). */
+  pathsForFiles(files: File[]): string[];
   clipboardRead(): string;
   clipboardWrite(text: string): void;
   windowControl(action: 'minimize' | 'maximize' | 'close' | 'fullscreen'): void;

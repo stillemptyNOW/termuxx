@@ -201,14 +201,10 @@ export async function connectPane(paneId: string) {
   connecting.add(paneId);
   st.updatePane(paneId, { status: 'connecting', message: undefined, dropped: false });
 
-  if (pane.kind === 'ssh') {
-    const server = st.server(pane.serverId);
-    if (!server) {
-      connecting.delete(paneId);
-      st.updatePane(paneId, { status: 'error', message: 'Сервер удалён из списка' });
-      return;
-    }
-    entry?.term.write(dim(`→ ${server.username}@${server.hostname}${server.port !== 22 ? `:${server.port}` : ''}`) + '\r\n');
+  if (pane.kind === 'ssh' && !st.server(pane.serverId)) {
+    connecting.delete(paneId);
+    st.updatePane(paneId, { status: 'error', message: 'Сервер удалён из списка' });
+    return;
   }
 
   try {

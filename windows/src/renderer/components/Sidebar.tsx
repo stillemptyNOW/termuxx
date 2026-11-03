@@ -215,11 +215,12 @@ export function Sidebar() {
           {hosts.length > 0 && ungrouped.length === 0 && groups.length === 0 && (
             <div className="tx-side-empty faint">Ничего не найдено</div>
           )}
-          {ungrouped.map((s) => (
-            <ServerRow key={s.id} server={s} selected={selectedId === s.id} onSelect={() => setSelectedId(s.id)} />
-          ))}
           {groups.map(([name, list]) => (
             <FolderBlock key={name} name={name} servers={list} selectedId={selectedId} onSelect={setSelectedId} />
+          ))}
+          {ungrouped.length > 0 && groups.length > 0 && <div className="section-title">Без папки</div>}
+          {ungrouped.map((s) => (
+            <ServerRow key={s.id} server={s} selected={selectedId === s.id} onSelect={() => setSelectedId(s.id)} />
           ))}
 
           {shells.length > 0 && !search && (

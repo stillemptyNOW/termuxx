@@ -203,6 +203,8 @@ export interface TransferProgress {
   speed: number;            // байт/с
   state: 'running' | 'done' | 'error' | 'cancelled';
   error?: string;
+  /** Локальный путь (файл или папка) для «Показать в папке». */
+  localPath?: string;
 }
 
 // ---------- Мониторинг ----------

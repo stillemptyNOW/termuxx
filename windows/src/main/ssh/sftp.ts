@@ -205,6 +205,8 @@ class Transfer {
     readonly sessionId: string,
     readonly direction: 'download' | 'upload',
     readonly files: TransferFile[],
+    /** Локальная папка (скачивание) или первый локальный файл (загрузка) — для «Показать в папке». */
+    readonly localPath?: string,
   ) {
     this.total = files.reduce((n, f) => n + f.size, 0);
   }
@@ -232,6 +234,7 @@ class Transfer {
       speed: this.state === 'running' ? this.speed : 0,
       state: this.state,
       error: this.error,
+      localPath: this.localPath,
     };
     this.ctx.broadcast(IPC.transfer, payload);
   }
@@ -326,7 +329,7 @@ export async function sftpDownload(ctx: MainContext, sessionId: string, remotePa
     const target = uniqueLocalPath(path.join(dir, safeLocalName(posixBasename(remote))));
     await collectRemote(sftp, remote, target, files, dirs);
   }
-  const transfer = new Transfer(ctx, sessionId, 'download', files);
+  const transfer = new Transfer(ctx, sessionId, 'download', files, files[0]?.local ?? dir);
   transfers.set(transfer.id, transfer);
   void runDownload(session, transfer, dirs);
   return transfer.id;
@@ -410,7 +413,7 @@ export async function sftpUpload(ctx: MainContext, sessionId: string, remoteDir:
   for (const p of paths) {
     collectLocal(p, posixJoin(remoteDir || '.', path.basename(p)), files, dirs);
   }
-  const transfer = new Transfer(ctx, sessionId, 'upload', files);
+  const transfer = new Transfer(ctx, sessionId, 'upload', files, paths[0]);
   transfers.set(transfer.id, transfer);
   void runUpload(session, transfer, dirs);
   return transfer.id;
