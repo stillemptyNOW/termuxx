@@ -189,7 +189,7 @@ jobs:
   release:
     name: Release
     needs: [ios, linux, windows]
-    if: always()
+    if: always() && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
